@@ -81,10 +81,8 @@ TaskStatus ISMR::DerefinePoles(MeshData<Real> *md)
     int ng = Globals::nghost;
     for (auto &pmb : pmesh->block_list) {
         auto& rc = pmb->meshblock_data.Get();
-        PackIndexMap cons_map, prims_map;
-        auto vars = rc->PackVariables(std::vector<MetadataFlag>{Metadata::WithFluxes}, cons_map);
-        auto P = rc->PackVariables(std::vector<MetadataFlag>{Metadata::GetUserFlag("Primitive")}, prims_map);
-        VarMap m_u(cons_map, true), m_p(prims_map, false);
+        PackIndexMap cons_map;
+        auto vars = rc->PackVariables(std::vector<MetadataFlag>{Metadata::Conserved, Metadata::Cell}, cons_map);
         auto vars_avg = rc->PackVariables(std::vector<std::string>{"ismr.vars_avg"});
         const int nvar = vars.GetDim(4);
         for (int i = 0; i < BOUNDARY_NFACES; i++) {
@@ -133,14 +131,25 @@ TaskStatus ISMR::DerefinePoles(MeshData<Real> *md)
                 );
 
                 // UtoP for the GRMHD variables
+                PackIndexMap prims_map;
+                auto P = rc->PackVariables(std::vector<MetadataFlag>{Metadata::GetUserFlag("Primitive"), Metadata::Cell}, prims_map);
+                VarMap m_u(cons_map, true), m_p(prims_map, false);
                 const auto& G = pmb->coords;
                 const Real gam = pmb->packages.Get("GRMHD")->Param<Real>("gamma");
                 const Floors::Prescription floors = pmb->packages.Get("Floors")->Param<Floors::Prescription>("prescription");
                 pmb->par_for("DerefinePoles_UtoP", bCC.ks, bCC.ke, j_p.s, j_p.e, bCC.is, bCC.ie,
                     KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
                         const int j_c = j + ((binner) ? 0 : -1); // cell center
+                        // The usual inverter is not EMHD-aware, so it's going to dump all of T into the
+                        // ideal GRMHD fluid variables
                         Inverter::u_to_p<Inverter::Type::kastaun>(G, vars, m_u, gam, k, j_c, i, P, m_p, Loci::center,
                                             floors, 8, 1e-8);
+                        // Consistent with that, we zero out the EMHD extra variables.  This switches theories to
+                        // evolving ideal GRMHD in ISMR region, but conserves the components of T themselves
+                        if (m_u.Q >= 0) vars(m_u.Q, k, j_c, i) = 0.;
+                        if (m_p.Q >= 0) P(m_p.Q, k, j_c, i) = 0.;
+                        if (m_u.DP >= 0) vars(m_u.DP, k, j_c, i) = 0.;
+                        if (m_p.DP >= 0) P(m_p.DP, k, j_c, i) = 0.;
                     }
                 );
                 // TODO there SHOULD be no need for floors here. Should test or prove this is always true
