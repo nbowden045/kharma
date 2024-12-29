@@ -492,6 +492,7 @@ TaskStatus B_CT::DerefinePoles(MeshData<Real> *md)
                 // indices
                 // TODO also get ranges in cells from the beginning rather than using j_p & calculating j_c
                 IndexRange3 bCC = KDomain::GetRange(rc, IndexDomain::interior, CC);
+                // Note these are invalid in X2! We use them only for X1/X3 directions
                 IndexRange3 bF1 = KDomain::GetRange(rc, domain, F1, ng, -ng);
                 IndexRange3 bF3 = KDomain::GetRange(rc, domain, F3, ng, -ng);
                 const int j_f = (binner) ? bCC.js : bCC.je + 1; // last physical face
