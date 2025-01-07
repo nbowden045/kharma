@@ -477,9 +477,10 @@ TaskStatus B_CT::DerefinePoles(MeshData<Real> *md)
 
     // Figure out indices
     int ng = Globals::nghost;
-    for (auto &pmb : pmesh->block_list) {
+    for (int iblock=0; iblock < md->NumBlocks(); iblock++) {
+        auto& rc = md->GetBlockData(iblock);
+        auto pmb = rc->GetBlockPointer();
         const auto& G = pmb->coords;
-        auto& rc = pmb->meshblock_data.Get();
         auto B_Uf = rc->PackVariables(std::vector<std::string>{"cons.fB"});
         auto B_avg = rc->PackVariables(std::vector<std::string>{"ismr.fB_avg"});
         for (int i = 0; i < BOUNDARY_NFACES; i++) {
