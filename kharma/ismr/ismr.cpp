@@ -87,8 +87,9 @@ TaskStatus ISMR::DerefinePoles(MeshData<Real> *md)
 
     // Figure out indices
     int ng = Globals::nghost;
-    for (auto &pmb : pmesh->block_list) {
-        auto& rc = pmb->meshblock_data.Get();
+    for (int iblock=0; iblock < md->NumBlocks(); iblock++) {
+        auto& rc = md->GetBlockData(iblock);
+        auto pmb = rc->GetBlockPointer();
         PackIndexMap cons_map, cons_map_utop;
         auto vars = rc->PackVariables(std::vector<MetadataFlag>{Metadata::Conserved, Metadata::Cell, Metadata::Independent}, cons_map);
         auto vars_avg = rc->PackVariables(std::vector<std::string>{"ismr.vars_avg"});
