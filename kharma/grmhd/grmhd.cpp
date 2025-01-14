@@ -305,16 +305,27 @@ Real EstimateTimestep(MeshData<Real> *md)
         const auto& cmax  = rc->PackVariables(std::vector<std::string>{"Flux.cmax"});
         const auto& cmin  = rc->PackVariables(std::vector<std::string>{"Flux.cmin"});
 
+        auto& boundaries = pmesh->packages.Get<KHARMAPackage>("Boundaries")->AllParams();
+        const bool excise_inner_x2 = boundaries.Get<bool>("excise_flux_inner_x2");
+        const bool excise_outer_x2 = boundaries.Get<bool>("excise_flux_outer_x2");
+
         double block_min_ndt = 0.;
         pmb->par_reduce("ndt_min", b.ks, b.ke, b.js, b.je, b.is, b.ie,
             KOKKOS_LAMBDA (const int k, const int j, const int i,
                         double &local_result) {
                 const auto& G = cmax.GetCoords();
                 int ismr_factor = 1;
+                double excise_factor = 1.0;
                 double courant_limit = 1.0;
 
+                if (excise_inner_x2 && polar_inner_x2 && j == b.js) {
+                    excise_factor = 0.5;
+                } else if (excise_outer_x2 && polar_outer_x2 && j == b.je) {
+                    excise_factor = 0.5;
+                }
+
                 double ndt_zone = courant_limit / (1 / (G.Dxc<1>(i) /  m::max(cmax(V1, k, j, i), cmin(V1, k, j, i))) +
-                                    1 / (G.Dxc<2>(j) /  m::max(cmax(V2, k, j, i), cmin(V2, k, j, i))) +
+                                    1 / (G.Dxc<2>(j) * excise_factor /  m::max(cmax(V2, k, j, i), cmin(V2, k, j, i))) +
                                     1 / (G.Dxc<3>(k) * ismr_factor /  m::max(cmax(V3, k, j, i), cmin(V3, k, j, i))));
 
                 if (!m::isnan(ndt_zone) && (ndt_zone < local_result)) {
@@ -646,7 +657,8 @@ void UpdateAveragedCtop(MeshData<Real> *md)
             // If we've modified values on the pole...
             if (params.Get<bool>("cancel_T3_" + bname) ||
                 params.Get<bool>("cancel_U3_" + bname) ||
-                b3_is_reconnected) {
+                b3_is_reconnected ||
+                params.Get<bool>("excise_flux_" + bname)) {
                 // ...and if this face of the block corresponds to a global boundary...
                 if (pmb->boundary_flag[bface] == BoundaryFlag::user) {
                     PackIndexMap prims_map, cons_map;
@@ -684,16 +696,8 @@ void UpdateAveragedCtop(MeshData<Real> *md)
                             Flux::vchar_global(G, P, m_p, Dtmp, gam, emhd_params, k, jf, i, Loci::center, X3DIR,
                                         cmax(V3, k, jf, i), cmin_minus);
                             cmin(V3, k, jf, i) = -cmin_minus;
-                            if (half_cells) {
-                                cmin(bdir-1, k, jf, i) *= 0.5;
-                                cmax(bdir-1, k, jf, i) *= 0.5;
-                            }
                         }
                     );
-
-                    if (params.Get<bool>("excise_flux_" + bname)) {
-
-                    }
                 }
             }
         }
