@@ -126,6 +126,7 @@ std::shared_ptr<KHARMAPackage> Initialize(ParameterInput *pin, std::shared_ptr<P
 
     // Save shear vs compression contribution to the pressure anisotropy
     bool save_dP_terms = pin->GetOrAddBoolean("emhd", "save_dP_terms", false);
+    params.Add("save_dP_terms", save_dP_terms);
 
     // General options for primitive and conserved scalar variables in ImEx driver
     // EMHD is supported only with imex driver and implicit evolution,
@@ -321,7 +322,7 @@ TaskStatus AddSource(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDomain doma
     int m_theta = temps_map["Theta"].first;
 
     // Get shear and compression contributions to dP
-    const bool save_dP_terms = pmb0->packages.Get("emhd")->Param<bool>("save_dP_terms");
+    const bool save_dP_terms = pars.Get<bool>("save_dP_terms");
     auto& dP_shear = md->PackVariables(std::vector<std::string>{"dP_shear"});
     auto& dP_comp = md->PackVariables(std::vector<std::string>{"dP_comp"});
     auto& dP_shear_old = md->PackVariables(std::vector<std::string>{"dP_shear_old"});
