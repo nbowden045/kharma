@@ -100,6 +100,18 @@ class CoordinateEmbedding {
                 base.emplace<SphBLExtG>(mpark::get<SphBLExtG>(base_in));
             }
 
+            // dCS and EdGB 
+            else if (mpark::holds_alternative<DCSKSCoords>(base_in)) {
+                base.emplace<DCSKSCoords>(mpark::get<DCSKSCoords>(base_in));
+            } else if (mpark::holds_alternative<DCSBLCoords>(base_in)) {
+                base.emplace<DCSBLCoords>(mpark::get<DCSBLCoords>(base_in));
+            }
+            else if (mpark::holds_alternative<EDGBKSCoords>(base_in)) {
+                base.emplace<EDGBKSCoords>(mpark::get<EDGBKSCoords>(base_in));
+            } else if (mpark::holds_alternative<EDGBBLCoords>(base_in)) {
+                base.emplace<EDGBBLCoords>(mpark::get<EDGBBLCoords>(base_in));
+            }
+
             if (mpark::holds_alternative<NullTransform>(transform_in)) {
                 transform.emplace<NullTransform>(mpark::get<NullTransform>(transform_in));
             } else if (mpark::holds_alternative<ExponentialTransform>(transform_in)) {
@@ -122,6 +134,7 @@ class CoordinateEmbedding {
         CoordinateEmbedding(parthenon::ParameterInput* pin) {
             const std::string base_str = pin->GetString("coordinates", "base");
             const std::string transform_str = pin->GetOrAddString("coordinates", "transform", "null");
+            const std::string theory = pin->GetOrAddString("coordinates", "theory", "gr");
 
             // Parse names.  See coordinate_systems.hpp for details
             if (base_str == "spherical_minkowski") {
@@ -129,8 +142,24 @@ class CoordinateEmbedding {
             } else if (base_str == "cartesian_minkowski" || base_str == "minkowski") {
                 base.emplace<CartMinkowskiCoords>(CartMinkowskiCoords());
             } else if (base_str == "spherical_ks" || base_str == "ks" ||
-                        base_str == "spherical_ks_extg" || base_str == "ks_extg") {
+                        base_str == "spherical_ks_extg" || base_str == "ks_extg" || 
+                        base_str == "dcs_ks"|| base_str == "edgb_ks") {
+
                 GReal a = pin->GetReal("coordinates", "a");
+
+                if (base_str == "dcs_ks") { 
+                    if (theory != "dcs") throw std::invalid_argument("Base coordinates is set to DCS,\
+                     but theory was not initialized to 'dcs'!");
+                    GReal zeta = pin->GetReal("coordinates", "zeta"); // Get "zeta" value
+                    base.emplace<DCSKSCoords>(DCSKSCoords(a, zeta));
+                }
+                else if (base_str == "edgb_ks") {
+                    if (theory != "edgb") throw std::invalid_argument("Base coordinates is set to EdGB,\
+                     but theory was not initialized to 'edgb'!");
+                    GReal zeta = pin->GetReal("coordinates", "zeta"); // Get "zeta" value
+                    base.emplace<EDGBKSCoords>(EDGBKSCoords(a, zeta));
+                }
+
                 bool ext_g = pin->GetOrAddBoolean("coordinates", "ext_g", false);
                 if (ext_g || base_str == "spherical_ks_extg" || base_str == "ks_extg") {
                     if (a > 0) throw std::invalid_argument("Transform is for spherical coordinates!");
@@ -138,9 +167,23 @@ class CoordinateEmbedding {
                 } else {
                     base.emplace<SphKSCoords>(SphKSCoords(a));
                 }
+
             } else if (base_str == "spherical_bl" || base_str == "bl" ||
-                        base_str == "spherical_bl_extg" || base_str == "bl_extg") {
+                        base_str == "spherical_bl_extg" || base_str == "bl_extg" ||
+                        base_str == "dcs_bl" || base_str == "edgb_bl") {
+
                 GReal a = pin->GetReal("coordinates", "a");
+
+                if (base_str == "dcs_bl") {
+                    GReal zeta = pin->GetReal("coordinates", "zeta");
+                    base.emplace<DCSBLCoords>(DCSBLCoords(a, zeta)); 
+                }
+                else if (base_str == "edgb_bl") {
+                    GReal zeta = pin->GetReal("coordinates", "zeta");
+                    base.emplace<EDGBBLCoords>(EDGBBLCoords(a, zeta));
+
+                }
+
                 bool ext_g = pin->GetOrAddBoolean("coordinates", "ext_g", false);
                 if (ext_g || base_str == "spherical_bl_extg" || base_str == "bl_extg") {
                     if (a > 0) throw std::invalid_argument("Transform is for spherical coordinates!");
@@ -250,9 +293,26 @@ class CoordinateEmbedding {
                 mpark::holds_alternative<SphBLCoords>(base) ||
                 mpark::holds_alternative<SphKSExtG>(base) ||
                 mpark::holds_alternative<SphBLExtG>(base)) {
+
                 const GReal a = get_a();
                 return 1 + m::sqrt(1 - a * a);
+
+            } else if (mpark::holds_alternative<DCSKSCoords>(base) || 
+                mpark::holds_alternative<DCSBLCoords>(base)) {
+
+                const GReal a = get_a();
+                const GReal zeta = get_zeta();
+                return (1 + m::sqrt(1 - a * a)) + ((72185 * m::pow(a,2) / 96096) + (189049321 * m::pow(a,4) / 931170240)) * zeta;
+
+            } else if (mpark::holds_alternative<EDGBKSCoords>(base) || 
+                mpark::holds_alternative<EDGBBLCoords>(base)) {
+
+                const GReal a = get_a();
+                const GReal zeta = get_zeta();
+                return (1 + m::sqrt(1 - a * a)) + ((-1117. / 2310.) - (3697. * m::pow(a,2) / 5850) + (211270219. * m::pow(a,4) / 1018467450)) * zeta;
+
             } else {
+
                 return 0.0;
             }
         }
@@ -262,6 +322,19 @@ class CoordinateEmbedding {
                 return self.a;
             }, base);
         }
+
+        KOKKOS_INLINE_FUNCTION GReal get_zeta() const
+        {
+            if (mpark::holds_alternative<DCSKSCoords>(base)) {
+
+                return mpark::get<DCSKSCoords>(base).zeta;
+            }
+            else if (mpark::holds_alternative<EDGBKSCoords>(base)) {
+
+                return mpark::get<EDGBKSCoords>(base).zeta;
+            }
+        }
+
         GReal startx(int dir) const
         {
             return mpark::visit( [&](const auto& self) {
@@ -585,11 +658,24 @@ class CoordinateEmbedding {
             GReal gcov_bl[GR_DIM][GR_DIM];
             if (mpark::holds_alternative<SphKSCoords>(base) ||
                 mpark::holds_alternative<SphBLCoords>(base)) {
+
                 SphBLCoords(get_a()).gcov_embed(Xembed, gcov_bl);
+
             } else if (mpark::holds_alternative<SphKSExtG>(base) ||
-                       mpark::holds_alternative<SphBLExtG>(base)) {
+                mpark::holds_alternative<SphBLExtG>(base)) {
+
                 SphBLExtG(get_a()).gcov_embed(Xembed, gcov_bl);
-            }
+
+            } else if (mpark::holds_alternative<DCSKSCoords>(base) || 
+                mpark::holds_alternative<DCSBLCoords>(base)){
+
+                DCSBLCoords(get_a(), get_zeta()).gcov_embed(Xembed, gcov_bl);
+
+            } else if (mpark::holds_alternative<EDGBKSCoords>(base) ||
+                mpark::holds_alternative<EDGBBLCoords>(base)){
+
+                EDGBBLCoords(get_a(), get_zeta()).gcov_embed(Xembed, gcov_bl);
+            } 
 
             Real ucon_bl_fourv[GR_DIM];
             DLOOP1 ucon_bl_fourv[mu] = ucon_bl[mu];
@@ -601,9 +687,18 @@ class CoordinateEmbedding {
                 mpark::get<SphKSCoords>(base).vec_from_bl(Xembed, ucon_bl_fourv, ucon_base);
             } else if (mpark::holds_alternative<SphKSExtG>(base)) {
                 mpark::get<SphKSExtG>(base).vec_from_bl(Xembed, ucon_bl_fourv, ucon_base);
-            } else if (mpark::holds_alternative<SphBLCoords>(base) ||
-                       mpark::holds_alternative<SphBLExtG>(base)) {
+            } else if (mpark::holds_alternative<DCSKSCoords>(base)) {      
+                mpark::get<DCSKSCoords>(base).vec_from_bl(Xembed, ucon_bl_fourv, ucon_base); 
+            } else if (mpark::holds_alternative<EDGBKSCoords>(base)) {
+                mpark::get<EDGBKSCoords>(base).vec_from_bl(Xembed, ucon_bl_fourv, ucon_base); 
+            } else if (mpark::holds_alternative<DCSBLCoords>(base)) {
                 DLOOP1 ucon_base[mu] = ucon_bl_fourv[mu];
+            } else if (mpark::holds_alternative<EDGBBLCoords>(base)) {
+                DLOOP1 ucon_base[mu] = ucon_bl_fourv[mu];
+            } else {
+                #ifndef KOKKOS_ENABLE_CUDA
+                throw std::invalid_argument("Unsupported base coordinates!");
+                #endif
             }
             // Finally, apply any transform to native coordinates
             con_vec_to_native(Xnative, ucon_base, ucon_native);
