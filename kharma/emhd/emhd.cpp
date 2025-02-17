@@ -124,6 +124,9 @@ std::shared_ptr<KHARMAPackage> Initialize(ParameterInput *pin, std::shared_ptr<P
     bool enable_emhd_limits = pin->GetOrAddBoolean("emhd", "stability_limits", emhd_limits_default);
     params.Add("enable_emhd_limits", enable_emhd_limits);
 
+    // Save shear vs compression contribution to the pressure anisotropy
+    bool save_dP_terms = pin->GetOrAddBoolean("emhd", "save_dP_terms", false);
+
     // General options for primitive and conserved scalar variables in ImEx driver
     // EMHD is supported only with imex driver and implicit evolution,
     // synchronizing primitive variables
@@ -162,6 +165,12 @@ std::shared_ptr<KHARMAPackage> Initialize(ParameterInput *pin, std::shared_ptr<P
     // we register zones where limits on q and dP are hit
     Metadata m = Metadata({Metadata::Real, Metadata::Cell, Metadata::Derived, Metadata::OneCopy});
     pkg->AddField("eflag", m);
+
+    // Fields to save shear and compression contributions to dP
+    pkg->AddField("dP_shear", m); // Trace-free shear
+    pkg->AddField("dP_comp", m); // Includes compression along the field along with isotropic compression
+    pkg->AddField("dP_shear_old", m); // Shear as computed in literature which can include a non-zero trace
+    pkg->AddField("dP_comp_old", m); // Isotropic compression
 
     // Callbacks
 
@@ -311,6 +320,13 @@ TaskStatus AddSource(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDomain doma
     int m_ucov = temps_map["ucov"].first;
     int m_theta = temps_map["Theta"].first;
 
+    // Get shear and compression contributions to dP
+    const bool save_dP_terms = pmb0->packages.Get("emhd")->Param<bool>("save_dP_terms");
+    auto& dP_shear = md->PackVariables(std::vector<std::string>{"dP_shear"});
+    auto& dP_comp = md->PackVariables(std::vector<std::string>{"dP_comp"});
+    auto& dP_shear_old = md->PackVariables(std::vector<std::string>{"dP_shear_old"});
+    auto& dP_comp_old = md->PackVariables(std::vector<std::string>{"dP_comp_old"});
+
     // Get ranges
     const IndexRange ib = mdudt->GetBoundsI(domain);
     const IndexRange jb = mdudt->GetBoundsJ(domain);
@@ -362,7 +378,6 @@ TaskStatus AddSource(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDomain doma
             const Real& rho = P(b)(m_p.RHO, k, j, i);
             const Real& Theta = Temps(b)(m_theta, k, j, i);
 
-
             if (m_s.Q >= 0) {
                 const Real& qtilde = P(b)(m_p.Q, k, j, i);
                 const double inv_mag_b = 1. / m::sqrt(bsq);
@@ -390,6 +405,24 @@ TaskStatus AddSource(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDomain doma
                 if (emhd_params.higher_order_terms)
                     dUdt(b, m_s.DP, k, j, i) += G.gdet(Loci::center, j, i) * (dPtilde / 2.) * div_ucon;
             }
+
+            // Compute the shear and compression contributions to dP
+            if (save_dP_terms) {
+                dP_shear(b, 0, k, j, i) = 0;
+                dP_comp(b, 0, k, j, i) = -div_ucon;
+                dP_shear_old(b, 0, k, j, i) = 0;
+                dP_comp_old(b, 0, k, j, i) = -div_ucon;
+
+                Real diag_grad_ucov[GR_DIM][GR_DIM] = {0};
+                VLOOP diag_grad_ucov[v+1][v+1] = grad_ucov[v+1][v+1];
+
+                DLOOP2 {
+                    dP_shear(b, 0, k, j, i) += 3. * (D.bcon[mu] * D.bcon[nu] / bsq) * (grad_ucov[mu][nu] - diag_grad_ucov[mu][nu]);
+                    dP_comp(b, 0, k, j, i) += 3. * (D.bcon[mu] * D.bcon[nu] / bsq) * diag_grad_ucov[mu][nu];
+                    dP_shear_old(b, 0, k, j, i) += 3. * (D.bcon[mu] * D.bcon[nu] / bsq) * grad_ucov[mu][nu];
+                }
+            }
+            
         }
     );
 
