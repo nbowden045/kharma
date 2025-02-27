@@ -449,6 +449,7 @@ KOKKOS_INLINE_FUNCTION int u_to_p<Type::kastaun>(const GRCoordinates& G, const V
             mu = 0.;
             x = 0.;
             W = 0.;
+            ret_momentum_failure = true;
         } else {
             while (1) {
                 Real muc = (mum + mup) / 2.;
