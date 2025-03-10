@@ -1,4 +1,6 @@
-# SANE model similar to the "Illinois v5" simulation library.
+# The Magnetically Arrested Disk (MAD) accretion flow
+# This is a normal large-disk (20/41 r_g) MAD with gamma=5/3,
+# like the "Illinois v5" simulation library.
 # It uses KHARMA's features such as transmitting boundary
 # conditions, Kastaun inverter, and first-order flux corrections
 # in order to set very low floors, yet with no observed
@@ -9,15 +11,15 @@ problem_id = torus
 archive_parameters = timestamp
 
 <parthenon/mesh>
-nx1 = 288
-nx2 = 128
-nx3 = 128
+nx1 = 128
+nx2 = 64
+nx3 = 64
 
 <parthenon/meshblock>
-nx1 = 144
+nx1 = 128
 nx2 = 64
 # Cannot break up phi with transmitting boundaries
-nx3 = 128
+nx3 = 64
 
 <coordinates>
 base = spherical_ks
@@ -33,9 +35,9 @@ tlim = 60000.0
 nlim = -1
 
 <torus>
-rin = 10.0
-rmax = 20.0
-# Tilt in degrees. YMMV.
+rin = 20.0
+rmax = 41.0
+# Tilt in degrees, rotates initial torus CC about +y. YMMV.
 tilt = 0.
 
 <perturbation>
@@ -43,7 +45,7 @@ u_jitter = 0.04
 
 <b_field>
 solver = face_ct
-type = sane
+type = mad
 beta_min = 100.
 
 <GRMHD>
@@ -75,8 +77,6 @@ reconnect_B3_inner_x2 = true
 reconnect_B3_outer_x2 = true
 
 <floors>
-# Now with FOFC it might work to set "frame = normal",
-# & remove sigma & beta ceilings...
 frame        = drift
 rho_min_geom = 1e-6
 u_min_geom   = 1e-8

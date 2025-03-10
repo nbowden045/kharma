@@ -1,25 +1,25 @@
-/* 
+/*
  *  File: b_ct.cpp
- *  
+ *
  *  BSD 3-Clause License
- *  
+ *
  *  Copyright (c) 2020, AFD Group at UIUC
  *  All rights reserved.
- *  
+ *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted provided that the following conditions are met:
- *  
+ *
  *  1. Redistributions of source code must retain the above copyright notice, this
  *     list of conditions and the following disclaimer.
- *  
+ *
  *  2. Redistributions in binary form must reproduce the above copyright notice,
  *     this list of conditions and the following disclaimer in the documentation
  *     and/or other materials provided with the distribution.
- *  
+ *
  *  3. Neither the name of the copyright holder nor the names of its
  *     contributors may be used to endorse or promote products derived from
  *     this software without specific prior written permission.
- *  
+ *
  *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  *  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  *  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -52,13 +52,7 @@ std::shared_ptr<KHARMAPackage> B_CT::Initialize(ParameterInput *pin, std::shared
     auto pkg = std::make_shared<KHARMAPackage>("B_CT");
     Params &params = pkg->AllParams();
 
-    // Diagnostic & inadvisable flags
-
-    // KHARMA requires some kind of field transport if there is a magnetic field allocated.
-    // Use this flag if you actually want to disable all magnetic field flux corrections,
-    // and allow a field divergence to grow unchecked, usually for debugging or comparison reasons
-    bool disable_ct = pin->GetOrAddBoolean("b_field", "disable_ct", false);
-    params.Add("disable_ct", disable_ct);
+    // Diagnostic flags
 
     // Default to stopping execution when divB is large, which generally indicates something
     // has gone wrong.  As always, can be disabled by the brave.
@@ -67,13 +61,10 @@ std::shared_ptr<KHARMAPackage> B_CT::Initialize(ParameterInput *pin, std::shared
     Real kill_on_divb_over = pin->GetOrAddReal("b_field", "kill_on_divb_over", 1.e-3);
     params.Add("kill_on_divb_over", kill_on_divb_over);
 
-    // TODO gs05_alpha, LDZ04 UCT1, LDZ07 UCT2
+    // TODO gs05_alpha, LDZ04 UCT1, LDZ07 UCT2?
     std::vector<std::string> ct_scheme_options = {"bs99", "gs05_0", "gs05_c", "sg07"};
-    std::string ct_scheme = pin->GetOrAddString("b_field", "ct_scheme", "sg07", ct_scheme_options);
+    std::string ct_scheme = pin->GetOrAddString("b_field", "ct_scheme", "gs05_c", ct_scheme_options);
     params.Add("ct_scheme", ct_scheme);
-    if (ct_scheme == "gs05_c")
-        std::cout << "KHARMA WARNING: G&S '05 epsilon_c CT is not well-tested." << std::endl
-                  << "Use in GR at your own risk!" << std::endl;
 
     // Use the default Parthenon prolongation operator, rather than the divergence-preserving one
     // This relies entirely on the EMF communication for preserving the divergence
@@ -119,12 +110,6 @@ std::shared_ptr<KHARMAPackage> B_CT::Initialize(ParameterInput *pin, std::shared
         m = Metadata(flags_emf_c, s_vector);
         pkg->AddField("B_CT.cemf", m);
     }
-
-    // INTERNAL SMR
-    // Hyerin (04/04/24) averaged B fields needed for ismr
-    // ISMR cache: not evolved, immediately copied to fluid state after averaging
-    m = Metadata({Metadata::Real, Metadata::Face, Metadata::Derived, Metadata::OneCopy});
-    pkg->AddField("ismr.fB_avg", m);
 
     // CALLBACKS
 
@@ -372,45 +357,14 @@ TaskStatus B_CT::CalculateEMF(MeshData<Real> *md)
                               + emfc(bl, V3, k, j - 1, i) + emfc(bl, V3, k, j - 1, i - 1));
                 }
             );
-        } else if (scheme == "gs05_c") {
-            // Get primitive velocity at face (on right side) (TODO do we need some average?)
-            auto& uvecf = md->PackVariables(std::vector<std::string>{"Flux.vr"});
-
+        } else if (scheme == "gs05_c" || scheme == "sg07") {
+            auto& rho = md->PackVariablesAndFluxes(std::vector<std::string>{"cons.rho"});
             pmb0->par_for("B_CT_emf_GS05_c", block.s, block.e, b1.ks, b1.ke, b1.js, b1.je, b1.is, b1.ie,
                 KOKKOS_LAMBDA (const int &bl, const int &k, const int &j, const int &i) {
-                    const auto& G = B_U.GetCoords(bl);
-                    // "simple" flux + upwinding method, Stone & Gardiner '09 but also in Stone+08 etc.
-                    // Upwinded differences take in order (1-indexed):
-                    // 1. EMF component direction to calculate
-                    // 2. Direction of derivative
-                    // 3. Direction of upwinding
-                    // ...then zone number...
-                    // and finally, a boolean indicating a leftward (e.g., i-3/4) vs rightward (i-1/4) position
+                    // Following adapted closely from AthenaK, including clever use of the mass flux for the
+                    // sign of the contact mode.
                     if (ndim > 2) {
-                        emf_pack(bl, E1, 0, k, j, i) +=
-                              0.125*(upwind_diff(B_U(bl), emfc(bl), uvecf(bl), 1, 3, 2, k, j, i, false)
-                                   - upwind_diff(B_U(bl), emfc(bl), uvecf(bl), 1, 3, 2, k, j, i, true))
-                            + 0.125*(upwind_diff(B_U(bl), emfc(bl), uvecf(bl), 1, 2, 3, k, j, i, false)
-                                   - upwind_diff(B_U(bl), emfc(bl), uvecf(bl), 1, 2, 3, k, j, i, true));
-                        emf_pack(bl, E2, 0, k, j, i) +=
-                              0.125*(upwind_diff(B_U(bl), emfc(bl), uvecf(bl), 2, 1, 3, k, j, i, false)
-                                   - upwind_diff(B_U(bl), emfc(bl), uvecf(bl), 2, 1, 3, k, j, i, true))
-                            + 0.125*(upwind_diff(B_U(bl), emfc(bl), uvecf(bl), 2, 3, 1, k, j, i, false)
-                                   - upwind_diff(B_U(bl), emfc(bl), uvecf(bl), 2, 3, 1, k, j, i, true));
-                    }
-                    emf_pack(bl, E3, 0, k, j, i) +=
-                          0.125*(upwind_diff(B_U(bl), emfc(bl), uvecf(bl), 3, 2, 1, k, j, i, false)
-                               - upwind_diff(B_U(bl), emfc(bl), uvecf(bl), 3, 2, 1, k, j, i, true))
-                        + 0.125*(upwind_diff(B_U(bl), emfc(bl), uvecf(bl), 3, 1, 2, k, j, i, false)
-                               - upwind_diff(B_U(bl), emfc(bl), uvecf(bl), 3, 1, 2, k, j, i, true));
-                }
-            );
-        } else if (scheme == "sg07") {
-            auto& rho = md->PackVariablesAndFluxes(std::vector<std::string>{"cons.rho"});
-            pmb0->par_for("B_CT_emf_SG07", block.s, block.e, b1.ks, b1.ke, b1.js, b1.je, b1.is, b1.ie,
-                KOKKOS_LAMBDA (const int &bl, const int &k, const int &j, const int &i) {
-                    if (ndim > 2) {
-                        // integrate E1 to corner using SG07
+                        // Integrate EMF to the corner using GS07 i.e. GS05 E^c upwinding
                         Real e1_l3 = (rho(bl).flux(X2DIR, 0, k-1, j, i) >= 0.0) ?
                                     B_U(bl).flux(X3DIR, V2, k, j-1, i) - emfc(bl, V1, k-1, j-1, i) :
                                     B_U(bl).flux(X3DIR, V2, k, j  , i) - emfc(bl, V1, k-1, j  , i);
@@ -425,7 +379,6 @@ TaskStatus B_CT::CalculateEMF(MeshData<Real> *md)
                                     -B_U(bl).flux(X2DIR, V3, k  , j, i) - emfc(bl, V1, k  , j  , i);
                         emf_pack(bl, E1, 0, k, j, i) += 0.25*(e1_l3 + e1_r3 + e1_l2 + e1_r2);
 
-                        // integrate E2 to corner using SG07
                         Real e2_l3 = (rho(bl).flux(X1DIR, 0, k-1, j, i) >= 0.0) ?
                                     -B_U(bl).flux(X3DIR, V1, k, j, i-1) - emfc(bl, V2, k-1, j, i-1) :
                                     -B_U(bl).flux(X3DIR, V1, k, j, i  ) - emfc(bl, V2, k-1, j, i  );
@@ -441,7 +394,6 @@ TaskStatus B_CT::CalculateEMF(MeshData<Real> *md)
                         emf_pack(bl, E2, 0, k, j, i) += 0.25*(e2_l3 + e2_r3 + e2_l1 + e2_r1);
                     }
 
-                    // integrate E3 to corner using SG07
                     Real e3_l2 = (rho(bl).flux(X1DIR, 0, k, j-1, i) >= 0.0) ?
                                 B_U(bl).flux(X2DIR, V1, k, j, i-1) - emfc(bl, V3, k, j-1, i-1) :
                                 B_U(bl).flux(X2DIR, V1, k, j, i  ) - emfc(bl, V3, k, j-1, i  );
@@ -525,9 +477,10 @@ TaskStatus B_CT::DerefinePoles(MeshData<Real> *md)
 
     // Figure out indices
     int ng = Globals::nghost;
-    for (auto &pmb : pmesh->block_list) {
+    for (int iblock=0; iblock < md->NumBlocks(); iblock++) {
+        auto& rc = md->GetBlockData(iblock);
+        auto pmb = rc->GetBlockPointer();
         const auto& G = pmb->coords;
-        auto& rc = pmb->meshblock_data.Get();
         auto B_Uf = rc->PackVariables(std::vector<std::string>{"cons.fB"});
         auto B_avg = rc->PackVariables(std::vector<std::string>{"ismr.fB_avg"});
         for (int i = 0; i < BOUNDARY_NFACES; i++) {
@@ -540,10 +493,10 @@ TaskStatus B_CT::DerefinePoles(MeshData<Real> *md)
                 // indices
                 // TODO also get ranges in cells from the beginning rather than using j_p & calculating j_c
                 IndexRange3 bCC = KDomain::GetRange(rc, IndexDomain::interior, CC);
+                // Note these are invalid in X2! We use them only for X1/X3 directions
                 IndexRange3 bF1 = KDomain::GetRange(rc, domain, F1, ng, -ng);
-                IndexRange3 bF2 = KDomain::GetRange(rc, domain, F2, (binner) ? 0 : -1, (binner) ? 1 : 0, false);
                 IndexRange3 bF3 = KDomain::GetRange(rc, domain, F3, ng, -ng);
-                const int j_f = (binner) ? bF2.je : bF2.js; // last physical face
+                const int j_f = (binner) ? bCC.js : bCC.je + 1; // last physical face
                 const int jps = (binner) ? j_f + (nlevels - 1) : j_f - (nlevels - 1); // start of the lowest level of derefinement
                 const IndexRange j_p = IndexRange{(binner) ? j_f : jps, (binner) ? jps : j_f};  // Range of x2 to be de-refined
                 const int offset = (binner) ? 1 : -1; // offset to read the physical face values
@@ -797,7 +750,8 @@ void B_CT::CalcDivB(MeshData<Real> *md, std::string divb_field_name)
 
 void B_CT::FillOutput(MeshBlock *pmb, ParameterInput *pin)
 {
-    auto rc = pmb->meshblock_data.Get();
+    // This is called after the step, use "base" container
+    auto rc = pmb->meshblock_data.Get("base");
     const int ndim = pmb->pmy_mesh->ndim;
     if (ndim < 2) return;
 

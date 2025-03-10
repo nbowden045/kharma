@@ -1,25 +1,25 @@
-/* 
+/*
  *  File: grmhd.cpp
- *  
+ *
  *  BSD 3-Clause License
- *  
+ *
  *  Copyright (c) 2020, AFD Group at UIUC
  *  All rights reserved.
- *  
+ *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted provided that the following conditions are met:
- *  
+ *
  *  1. Redistributions of source code must retain the above copyright notice, this
  *     list of conditions and the following disclaimer.
- *  
+ *
  *  2. Redistributions in binary form must reproduce the above copyright notice,
  *     this list of conditions and the following disclaimer in the documentation
  *     and/or other materials provided with the distribution.
- *  
+ *
  *  3. Neither the name of the copyright holder nor the names of its
  *     contributors may be used to endorse or promote products derived from
  *     this software without specific prior written permission.
- *  
+ *
  *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  *  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  *  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -112,6 +112,7 @@ std::shared_ptr<KHARMAPackage> Initialize(ParameterInput *pin, std::shared_ptr<P
                           (pin->GetBoolean("emhd", "on") || pin->GetOrAddBoolean("GRMHD", "implicit", false));
     params.Add("implicit", implicit_grmhd);
     // Explicitly-evolved ideal MHD variables as guess for Extended MHD runs
+    // TODO move to EMHD package, guard reads on package presence
     const bool ideal_guess = pin->GetOrAddBoolean("emhd", "ideal_guess", false);
     params.Add("ideal_guess", ideal_guess);
 
@@ -189,16 +190,12 @@ std::shared_ptr<KHARMAPackage> Initialize(ParameterInput *pin, std::shared_ptr<P
     // A KHARMAPackage also contains quite a few "callbacks," or functions called at
     // specific points in a step if the package is loaded.
     // Generally, see the headers for function descriptions.
-
-    //pkg->BlockUtoP // Taken care of by separate "Inverter" package since it's hard to do
-
-    // On physical boundaries, even if we've sync'd both, respect the application to primitive variables
-    pkg->DomainBoundaryPtoU = Flux::BlockPtoUMHD;
-
-    // AMR-related
     pkg->CheckRefinementBlock    = GRMHD::CheckRefinement;
     pkg->EstimateTimestepMesh    = GRMHD::EstimateTimestep;
     pkg->PostStepDiagnosticsMesh = GRMHD::PostStepDiagnostics;
+    // NOTE: PtoU and UtoP for the five fluid variables are taken care of by the "Inverter"
+    // package, which registers the relevant callbacks
+    // This is so that the whole package can be disabled when running implicitly or w/EMHD
 
     // List (vector) of HistoryOutputVars that will all be enrolled as output variables
     parthenon::HstVar_list hst_vars = {};
@@ -254,9 +251,9 @@ Real EstimateTimestep(MeshData<Real> *md)
     // This function is a nice demo of why client-side flagging
     // like this is inadvisable: you have to EndFlag() at every different return
     Flag("EstimateTimestep");
-    auto pmb0 = md->GetBlockData(0)->GetBlockPointer();
-    auto& globals = pmb0->packages.Get("Globals")->AllParams();
-    const auto& grmhd_pars = pmb0->packages.Get("GRMHD")->AllParams();
+    auto pmesh = md->GetMeshPointer();
+    auto& globals = pmesh->packages.Get("Globals")->AllParams();
+    const auto& grmhd_pars = pmesh->packages.Get("GRMHD")->AllParams();
 
     // If we have to recompute ctop anywhere, we do it now
     UpdateAveragedCtop(md);
@@ -294,48 +291,54 @@ Real EstimateTimestep(MeshData<Real> *md)
     }
 
     // Actually compute the timestep if we have to
-    const auto& cmax  = md->PackVariables(std::vector<std::string>{"Flux.cmax"});
-    const auto& cmin  = md->PackVariables(std::vector<std::string>{"Flux.cmin"});
-
     const IndexRange3 b = KDomain::GetRange(md, IndexDomain::interior);
-    const IndexRange block = IndexRange{0, cmax.GetDim(5)-1};
 
     // Added by Hyerin (03/07/24)
     // Internal SMR adds a factor to dx3 at poles based on larger cell width
     // TODO distinguish polar from other ISMR if more modes are added
-    const bool ismr_poles = pmb->packages.AllPackages().count("ISMR");
-    const bool polar_inner_x2 = pmb->boundary_flag[BoundaryFace::inner_x2] == BoundaryFlag::user;
-    const bool polar_outer_x2 = pmb->boundary_flag[BoundaryFace::outer_x2] == BoundaryFlag::user;
-    const uint ismr_nlevels = (ismr_poles) ? pmb->packages.Get("ISMR")->Param<uint>("nlevels") : 0;
+    const bool ismr_poles = pmesh->packages.AllPackages().count("ISMR");
+    const uint ismr_nlevels = (ismr_poles) ? pmesh->packages.Get("ISMR")->Param<uint>("nlevels") : 0;
 
     // TODO version preserving location, with switch to keep this fast one
-    // TODO if ISMR, split w/simple kernel over regular zones here, kernel over just ISMR in that pkg?
-    // std::tuple doesn't work device-side, Kokkos::pair is 2D.  pair of pairs?
-    Real min_ndt = 0.;
-    pmb0->par_reduce("ndt_min", block.s, block.e, b.ks, b.ke, b.js, b.je, b.is, b.ie,
-        KOKKOS_LAMBDA (const int b, const int k, const int j, const int i,
-                      Real &local_result) {
-            const auto& G = cmax.GetCoords(b);
-            int ismr_factor = 1;
-            double courant_limit = 1.0;
-            if (ismr_poles && polar_inner_x2 && j < (jb.s + ismr_nlevels)) {
-                ismr_factor = m::pow(2, ismr_nlevels - (j - jb.s));
-                courant_limit = 0.5;
-            }
-            if (ismr_poles && polar_outer_x2 && j > (jb.e - ismr_nlevels)) {
-                ismr_factor = m::pow(2, ismr_nlevels - (jb.e - j));
-                courant_limit = 0.5;
-            }
+    // TODO maybe split normal vs ISMR (/Excised pole/etc) timesteps? Make normal calculation mesh-wise?
+    double min_ndt = std::numeric_limits<double>::max();
+    for (auto &pmb : pmesh->block_list) {
+        auto rc = pmb->meshblock_data.Get(md->StageName()).get();
+        // We only need this block-wise to check boundary flags for ISMR, could special-case that
+        const bool polar_inner_x2 = pmb->boundary_flag[BoundaryFace::inner_x2] == BoundaryFlag::user;
+        const bool polar_outer_x2 = pmb->boundary_flag[BoundaryFace::outer_x2] == BoundaryFlag::user;
 
-            double ndt_zone = courant_limit / (1 / (G.Dxc<1>(i) /  m::max(cmax(b, V1, k, j, i), cmin(b, V1, k, j, i))) +
-                                   1 / (G.Dxc<2>(j) /  m::max(cmax(b, V2, k, j, i), cmin(b, V2, k, j, i))) +
-                                   1 / (G.Dxc<3>(k) * ismr_factor /  m::max(cmax(b, V3, k, j, i), cmin(b, V3, k, j, i))));
+        const auto& cmax  = rc->PackVariables(std::vector<std::string>{"Flux.cmax"});
+        const auto& cmin  = rc->PackVariables(std::vector<std::string>{"Flux.cmin"});
 
-            if (!m::isnan(ndt_zone) && (ndt_zone < local_result)) {
-                local_result = ndt_zone;
+        double block_min_ndt = 0.;
+        pmb->par_reduce("ndt_min", b.ks, b.ke, b.js, b.je, b.is, b.ie,
+            KOKKOS_LAMBDA (const int k, const int j, const int i,
+                        double &local_result) {
+                const auto& G = cmax.GetCoords();
+                int ismr_factor = 1;
+                double courant_limit = 1.0;
+                if (ismr_poles && polar_inner_x2 && j < (b.js + ismr_nlevels)) {
+                    ismr_factor = m::pow(2, ismr_nlevels - (j - b.js));
+                    courant_limit = 0.5;
+                }
+                if (ismr_poles && polar_outer_x2 && j > (b.je - ismr_nlevels)) {
+                    ismr_factor = m::pow(2, ismr_nlevels - (b.je - j));
+                    courant_limit = 0.5;
+                }
+
+                double ndt_zone = courant_limit / (1 / (G.Dxc<1>(i) /  m::max(cmax(V1, k, j, i), cmin(V1, k, j, i))) +
+                                    1 / (G.Dxc<2>(j) /  m::max(cmax(V2, k, j, i), cmin(V2, k, j, i))) +
+                                    1 / (G.Dxc<3>(k) * ismr_factor /  m::max(cmax(V3, k, j, i), cmin(V3, k, j, i))));
+
+                if (!m::isnan(ndt_zone) && (ndt_zone < local_result)) {
+                    local_result = ndt_zone;
+                }
             }
-        }
-    , Kokkos::Min<Real>(min_ndt));
+        , Kokkos::Min<double>(block_min_ndt));
+        if (block_min_ndt < min_ndt) min_ndt = block_min_ndt;
+        //std::cerr << "Got block timestep: " << block_min_ndt << std::endl;
+    }
     //std::cerr << "Got min timestep: " << min_ndt << std::endl;
 
     // Apply limits (TODO move into KHARMADriver::SetGlobalTimestep)
@@ -514,7 +517,7 @@ void CancelBoundaryU3(MeshBlockData<Real> *rc, IndexDomain domain, bool coarse)
     const Floors::Prescription floors = pmb->packages.Get("Floors")->Param<Floors::Prescription>("prescription");
     const EMHD::EMHD_parameters& emhd_params = EMHD::GetEMHDParameters(pmb->packages);
 
-    // Subtract the average B3 as "reconnection"
+    // Subtract the average B3 as "reconnection" through the pole
     IndexRange3 b = KDomain::GetRange(rc, domain, coarse);
     IndexRange3 bi = KDomain::GetRange(rc, IndexDomain::interior, coarse);
     const int jf = (binner) ? bi.js : bi.je; // j index of last zone next to pole
@@ -530,6 +533,7 @@ void CancelBoundaryU3(MeshBlockData<Real> *rc, IndexDomain domain, bool coarse)
                     }
                 );
             }
+            member.team_barrier();
 
             // Sum the first rank of U3
             Real U3_sum = 0.;
@@ -539,6 +543,7 @@ void CancelBoundaryU3(MeshBlockData<Real> *rc, IndexDomain domain, bool coarse)
                     local_result += isnan(P(m_p.U3, k, jf, i)) ? 0. : P(m_p.U3, k, jf, i);
                 }
             , sum_reducer);
+            member.team_barrier();
 
             // Subtract the average, floor, restore conserved vars, update ctop
             const Real U3_avg = U3_sum / (bi.ke - bi.ks + 1);
@@ -602,6 +607,7 @@ void CancelBoundaryT3(MeshBlockData<Real> *rc, IndexDomain domain, bool coarse)
                     }
                 );
             }
+            member.team_barrier();
 
             // Sum the first rank of the angular momentum T3
             Real T3_sum = 0.;
@@ -611,6 +617,7 @@ void CancelBoundaryT3(MeshBlockData<Real> *rc, IndexDomain domain, bool coarse)
                     local_result += isnan(U(m_u.U3, k, jf, i)) ? 0. : U(m_u.U3, k, jf, i);
                 }
             , sum_reducer);
+            member.team_barrier();
 
             // Calculate the average and subtract it
             const Real T3_avg = T3_sum / (bi.ke - bi.ks + 1);
@@ -636,7 +643,7 @@ void UpdateAveragedCtop(MeshData<Real> *md)
     auto pmesh = md->GetMeshPointer();
     auto& params = pmesh->packages.Get<KHARMAPackage>("Boundaries")->AllParams();
     for (auto &pmb : pmesh->block_list) {
-        auto &rc = pmb->meshblock_data.Get();
+        auto &rc = pmb->meshblock_data.Get(md->StageName());
         for (int i = 0; i < BOUNDARY_NFACES; i++) {
             BoundaryFace bface = (BoundaryFace)i;
             auto bname = KBoundaries::BoundaryName(bface);
@@ -667,12 +674,16 @@ void UpdateAveragedCtop(MeshData<Real> *md)
                     const Floors::Prescription floors = pmb->packages.Get("Floors")->Param<Floors::Prescription>("prescription");
                     const EMHD::EMHD_parameters& emhd_params = EMHD::GetEMHDParameters(pmb->packages);
 
+                    // If we calculated the flux assuming half-size cells,
+                    // we modify ctop rather than special-case in EstimateTimestep
+                    const bool half_cells = params.Get<bool>("excise_flux_" + bname);
+
                     // Recompute ctop in zones affected by averaging
                     IndexRange3 b = KDomain::GetRange(rc, bdomain);
                     IndexRange3 bi = KDomain::GetRange(rc, IndexDomain::interior);
                     // TODO this part wouldn't be hard to generalize if polar boundary moves
                     const int jf = (binner) ? bi.js : bi.je;
-                    pmb->par_for("check_refinement", b.ks, b.ke, b.is, b.ie,
+                    pmb->par_for("update_ctop_in_averaged", b.ks, b.ke, b.is, b.ie,
                         KOKKOS_LAMBDA(const int& k, const int& i) {
                             FourVectors Dtmp;
                             GRMHD::calc_4vecs(G, P, m_p, k, jf, i, Loci::center, Dtmp);
@@ -687,6 +698,10 @@ void UpdateAveragedCtop(MeshData<Real> *md)
                             Flux::vchar_global(G, P, m_p, Dtmp, gam, emhd_params, k, jf, i, Loci::center, X3DIR,
                                         cmax(V3, k, jf, i), cmin_minus);
                             cmin(V3, k, jf, i) = -cmin_minus;
+                            if (half_cells) {
+                                cmin(bdir-1, k, jf, i) *= 0.5;
+                                cmax(bdir-1, k, jf, i) *= 0.5;
+                            }
                         }
                     );
                 }
