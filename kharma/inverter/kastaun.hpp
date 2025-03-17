@@ -453,9 +453,10 @@ KOKKOS_INLINE_FUNCTION int u_to_p<Type::kastaun>(const GRCoordinates& G, const V
         } else {
             while (1) {
                 Real muc = (mum + mup) / 2.;
-                if (m::abs(f(muc)) < 1e-8 || m::abs((mup - mum) / 2) < 1e-8) {
+                Real resv = m::abs(f(muc));
+                if (resv < 1e-8 || m::abs((mup - mum) / 2) < 1e-10) {
                     mu = muc;
-                    if (m::abs(f(mu)) < 1e-8) {
+                    if (resv < 1e-8) {
                         // If we're solved set the solution
                         x = res.x_mu(mu);
                         rbarsq = res.rbarsq_mu(mu, x);
@@ -491,7 +492,7 @@ KOKKOS_INLINE_FUNCTION int u_to_p<Type::kastaun>(const GRCoordinates& G, const V
     if (res.used_gamma_max())     fflag |= Floors::FFlag::INVERTER_GAMMA;
     if (res.used_energy_max())    fflag |= Floors::FFlag::INVERTER_U_MAX;
 
-    return fflag + (ret_momentum_failure) ? static_cast<int>(Status::bad_velocity) : 0 ;
+    return fflag + ((ret_momentum_failure) ? static_cast<int>(Status::bad_velocity) : 0);
 }
 
 }
