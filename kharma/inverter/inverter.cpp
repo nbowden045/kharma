@@ -93,11 +93,11 @@ std::shared_ptr<KHARMAPackage> Inverter::Initialize(ParameterInput *pin, std::sh
     bool bad_vels_are_failures = pin->GetOrAddBoolean("inverter", "bad_vels_are_failures", true);
     params.Add("bad_vels_are_failures", bad_vels_are_failures);
 
-    // Fix by averaging neighboring cells.  Enabled by default; may want to disable if configuring Kastaun solver never to fail
-    bool fix_average_neighbors = pin->GetOrAddBoolean("inverter", "fix_average_neighbors", true);
+    // Fix by averaging neighboring cells.  Enabled by default for 1Dw, but Kastaun failures are more dire
+    bool fix_average_neighbors = pin->GetOrAddBoolean("inverter", "fix_average_neighbors", !use_kastaun);
     params.Add("fix_average_neighbors", fix_average_neighbors);
     // Fix by replacing with floors, uvec=0. Usually a fallback for no neighbors,
-    // but also used if Kastaun ever fails for some reason (negative input, usually, or hitting max_iter)
+    // but also used if Kastaun ever fails for some reason (generally negative or near-negative input, so atmo makes sense)
     bool fix_atmosphere = pin->GetOrAddBoolean("inverter", "fix_atmosphere", true);
     params.Add("fix_atmosphere", fix_atmosphere);
     // TODO add version attempting to recover from entropy, stuff like that
