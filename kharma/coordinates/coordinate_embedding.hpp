@@ -160,12 +160,16 @@ class CoordinateEmbedding {
                     base.emplace<EDGBKSCoords>(EDGBKSCoords(a, zeta));
                 }
 
-                bool ext_g = pin->GetOrAddBoolean("coordinates", "ext_g", false);
-                if (ext_g || base_str == "spherical_ks_extg" || base_str == "ks_extg") {
-                    if (a > 0) throw std::invalid_argument("Transform is for spherical coordinates!");
-                    base.emplace<SphKSExtG>(SphKSExtG(a));
-                } else {
-                    base.emplace<SphKSCoords>(SphKSCoords(a));
+                else {
+                    if (theory != "gr") throw std::invalid_argument("Base coordinates is set to GR,\
+                        but theory was not initialized to 'gr'!");
+                    bool ext_g = pin->GetOrAddBoolean("coordinates", "ext_g", false);
+                    if (ext_g || base_str == "spherical_ks_extg" || base_str == "ks_extg") {
+                        if (a > 0) throw std::invalid_argument("Transform is for spherical coordinates!");
+                        base.emplace<SphKSExtG>(SphKSExtG(a));
+                    } else {
+                        base.emplace<SphKSCoords>(SphKSCoords(a));
+                    }
                 }
 
             } else if (base_str == "spherical_bl" || base_str == "bl" ||
@@ -183,13 +187,14 @@ class CoordinateEmbedding {
                     base.emplace<EDGBBLCoords>(EDGBBLCoords(a, zeta));
 
                 }
-
-                bool ext_g = pin->GetOrAddBoolean("coordinates", "ext_g", false);
-                if (ext_g || base_str == "spherical_bl_extg" || base_str == "bl_extg") {
-                    if (a > 0) throw std::invalid_argument("Transform is for spherical coordinates!");
-                    base.emplace<SphBLExtG>(SphBLExtG(a));
-                } else {
-                    base.emplace<SphBLCoords>(SphBLCoords(a));
+                else {
+                    bool ext_g = pin->GetOrAddBoolean("coordinates", "ext_g", false);
+                    if (ext_g || base_str == "spherical_bl_extg" || base_str == "bl_extg") {
+                        if (a > 0) throw std::invalid_argument("Transform is for spherical coordinates!");
+                        base.emplace<SphBLExtG>(SphBLExtG(a));
+                    } else {
+                        base.emplace<SphBLCoords>(SphBLCoords(a));
+                    }
                 }
             } else {
                 throw std::invalid_argument("Unsupported base coordinates!");
