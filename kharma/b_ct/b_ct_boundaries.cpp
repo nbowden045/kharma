@@ -242,7 +242,7 @@ void B_CT::DestructiveBoundaryClean(MeshBlockData<Real> *rc, IndexDomain domain,
                                         - fpack(F1, 0, k, last_rank_c, i) * G.Volume<F1>(k, last_rank_c, i));
                     if (ndim > 2)
                         new_face -= fpack(F3, 0, k + 1, last_rank_c, i) * G.Volume<F3>(k + 1, last_rank_c, i)
-                                    - fpack(F3, 0, k, last_rank_c, i) * G.Volume<F3>(k, j, last_rank_c, i);
+                                    - fpack(F3, 0, k, last_rank_c, i) * G.Volume<F3>(k, last_rank_c, i);
 
                     fpack(F2, 0, k, j, i) = outward_sign * new_face / G.Volume<F2>(k, j, i);
                 }
