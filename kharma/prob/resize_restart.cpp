@@ -125,6 +125,7 @@ void ReadIharmRestartHeader(std::string fname, ParameterInput *pin)
     } else {
         pin->SetInteger("resize_restart", "nfprim", 8);
     }
+    pin->SetInteger("resize_restart", "nfprim", 10);
 
     // End HDF5 reads
     hdf5_close();
@@ -343,6 +344,7 @@ TaskStatus ReadIharmRestart(std::shared_ptr<MeshBlockData<Real>>& rc, ParameterI
                          fstop[1] - fstart[1] + 1,
                          fstop[2] - fstart[2] + 1,
                          fstop[3] - fstart[3] + 1};
+
     // If we overran an index on the left, we need to leave a blank row (i.e., start at 1 == true) to reflect this
     hsize_t mstart[4] = {0, (gks < 0), (gjs < 0), (gis < 0)};
     // Total memory size is never truncated
@@ -426,10 +428,14 @@ TaskStatus ReadIharmRestart(std::shared_ptr<MeshBlockData<Real>>& rc, ParameterI
     GridScalar u = rc->Get("prims.u").data;
     GridVector uvec = rc->Get("prims.uvec").data;
     GridVector B_P = rc->Get("prims.B").data;
+    GridScalar q = rc->Get("prims.q").data;
+    GridScalar dP = rc->Get("prims.dP").data;
     auto rho_host = rho.GetHostMirror();
     auto u_host = u.GetHostMirror();
     auto uvec_host = uvec.GetHostMirror();
     auto B_host = B_P.GetHostMirror();
+    auto q_host = q.GetHostMirror();
+    auto dP_host = dP.GetHostMirror();
 
     // Interpolate on the host side & copy into the mirror Views
     // Nearest-neighbor interpolation is currently only used when grids exactly correspond -- otherwise, linear interpolation is used
@@ -447,8 +453,10 @@ TaskStatus ReadIharmRestart(std::shared_ptr<MeshBlockData<Real>>& rc, ParameterI
             // Fill cells of the new block with equivalents in the cached block
             rho_host(k, j, i) = ptmp[0*nmblock + mk*nmj*nmi + mj*nmi + mi];
             u_host(k, j, i)   = ptmp[1*nmblock + mk*nmj*nmi + mj*nmi + mi];
-            VLOOP uvec_host(v, k, j, i) = ptmp[(2+v)*nmblock + mk*nmj*nmi + mj*nmi + mi];
-            VLOOP B_host(v, k, j, i) = ptmp[(5+v)*nmblock + mk*nmj*nmi + mj*nmi + mi];
+            q_host(k, j, i) = ptmp[3*nmblock + mk*nmj*nmi + mj*nmi + mi];
+            dP_host(k, j, i) = ptmp[4*nmblock + mk*nmj*nmi + mj*nmi + mi];
+            VLOOP uvec_host(v, k, j, i) = ptmp[(4+v)*nmblock + mk*nmj*nmi + mj*nmi + mi];
+            VLOOP B_host(v, k, j, i) = ptmp[(7+v)*nmblock + mk*nmj*nmi + mj*nmi + mi];
         }
     } else {
         // TODO real boundary flags. Repeat on any outflow/reflecting bounds
@@ -474,14 +482,18 @@ TaskStatus ReadIharmRestart(std::shared_ptr<MeshBlockData<Real>>& rc, ParameterI
             // Interpolate the value at this location from the cached grid
             rho_host(k, j, i) = Interpolation::linear(mi, mj, mk, nmi, nmj, nmk, del, &(ptmp[0*nmblock]));
             u_host(k, j, i) = Interpolation::linear(mi, mj, mk, nmi, nmj, nmk, del, &(ptmp[1*nmblock]));
-            VLOOP uvec_host(v, k, j, i) = Interpolation::linear(mi, mj, mk, nmi, nmj, nmk, del, &(ptmp[(2+v)*nmblock]));
-            VLOOP B_host(v, k, j, i) = Interpolation::linear(mi, mj, mk, nmi, nmj, nmk, del, &(ptmp[(5+v)*nmblock]));
+            q_host(k, j, i) = Interpolation::linear(mi, mj, mk, nmi, nmj, nmk, del, &(ptmp[3*nmblock]));
+            dP_host(k, j, i) = Interpolation::linear(mi, mj, mk, nmi, nmj, nmk, del, &(ptmp[4*nmblock]));
+            VLOOP uvec_host(v, k, j, i) = Interpolation::linear(mi, mj, mk, nmi, nmj, nmk, del, &(ptmp[(4+v)*nmblock]));
+            VLOOP B_host(v, k, j, i) = Interpolation::linear(mi, mj, mk, nmi, nmj, nmk, del, &(ptmp[(7+v)*nmblock]));
         }
     }
 
     // Deep copy to device
     rho.DeepCopy(rho_host);
     u.DeepCopy(u_host);
+    q.DeepCopy(q_host);
+    dP.DeepCopy(dP_host);
     uvec.DeepCopy(uvec_host);
     B_P.DeepCopy(B_host);
     Kokkos::fence();

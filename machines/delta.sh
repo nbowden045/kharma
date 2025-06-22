@@ -48,7 +48,7 @@ then
     fi
   else
     # CPU Compile
-    module load modtree/cpu gcc
+    module load gcc openmpi
     MPI_NUM_PROCS=1
   fi
 fi
