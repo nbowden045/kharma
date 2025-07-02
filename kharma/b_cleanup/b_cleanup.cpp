@@ -548,4 +548,4 @@ TaskStatus B_Cleanup::CenterLaplacian(MeshData<Real>* md, const std::string& p_v
     return TaskStatus::complete;
 }
 
-#endif
+#endif // DISABLE_CLEANUP

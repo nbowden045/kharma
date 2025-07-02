@@ -44,7 +44,14 @@
 #include "one_block_transmit.hpp"
 #include "types.hpp"
 
-#if DISABLE_CLEANUP
+#include "poisson_equation.hpp"
+
+#include <solvers/bicgstab_solver.hpp>
+#include <solvers/cg_solver.hpp>
+#include <solvers/mg_solver.hpp>
+#include <solvers/solver_utils.hpp>
+
+#if DISABLE_GMG_CLEANUP
 
 // The package should never be loaded if there is not a global solve to be done.
 // Therefore we yell at load time rather than waiting for the first solve
@@ -58,13 +65,6 @@ TaskStatus B_CleanupGMG::CleanupDivergence(std::shared_ptr<MeshData<Real>>& md)
 }
 
 #else
-
-#include "poisson_equation.hpp"
-
-#include <solvers/bicgstab_solver.hpp>
-#include <solvers/cg_solver.hpp>
-#include <solvers/mg_solver.hpp>
-#include <solvers/solver_utils.hpp>
 
 std::shared_ptr<KHARMAPackage> B_CleanupGMG::Initialize(ParameterInput *pin, std::shared_ptr<Packages_t>& packages)
 {
@@ -163,7 +163,7 @@ std::shared_ptr<KHARMAPackage> B_CleanupGMG::Initialize(ParameterInput *pin, std
     auto m_rhs = Metadata({Metadata::Cell, Metadata::Derived, Metadata::OneCopy,
                            Metadata::GetUserFlag("StartupOnly")});
     pkg->AddField(rhs::name(), m_rhs);
-
+//#endif
     return pkg;
 }
 
@@ -286,4 +286,4 @@ TaskStatus B_CleanupGMG::ApplyPFace(MeshData<Real> *msolve, MeshData<Real> *md)
     return TaskStatus::complete;
 }
 
-#endif // DISABLE_CLEANUP
+#endif // DISABLE_GMG_CLEANUP

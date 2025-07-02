@@ -33,12 +33,6 @@
  */
 #include "b_cleanup_gmg.hpp"
 
-#if DISABLE_CLEANUP
-
-// Do we even need to no-op this?
-
-#else
-
 #include <parthenon/parthenon.hpp>
 #include <solvers/solver_utils.hpp>
 #include <solvers/solver_base.hpp>
@@ -46,11 +40,18 @@
 #include "poisson_equation.hpp"
 #include "kharma.hpp"
 
+#if DISABLE_GMG_CLEANUP
+
+// Do we even need to no-op this?
+
+#else
+
 TaskCollection B_CleanupGMG::MakeSolverTaskCollection(Mesh* pmesh)
 {
     using namespace parthenon;
     TaskCollection tc;
     TaskID t_none(0);
+    std::cerr << "1" << std::endl;
 
     auto pkg = pmesh->packages.Get("B_CleanupGMG");
     // auto solver_name = pkg->Param<std::string>("solver");
@@ -73,6 +74,7 @@ TaskCollection B_CleanupGMG::MakeSolverTaskCollection(Mesh* pmesh)
     auto partitions = pmesh->GetDefaultBlockPartitions();
     const int num_partitions = partitions.size();
     TaskRegion &region = tc.AddRegion(num_partitions);
+    std::cerr << "2" << std::endl;
     for (int i = 0; i < num_partitions; i++) {
         auto &tl = region[i];
         auto &md = pmesh->mesh_data.Add("base", partitions[i]);
@@ -89,7 +91,7 @@ TaskCollection B_CleanupGMG::MakeSolverTaskCollection(Mesh* pmesh)
         t_zero_p = tl.AddTask(t_zero_p, TF(solvers::utils::SetToZero<p>), md_p);
 
         std::cerr << "ADDING SETUP TASKS" << std::endl;
-        auto t_setup = psolver->AddSetupTasks(tl, t_zero_p, i, pmesh);
+        auto t_setup = psolver->AddSetupTasks(tl, t_zero_p, i, pmesh); // t_zero_p
         std::cerr << "ADDING SOLVER TASKS" << std::endl;
         auto t_solve = psolver->AddTasks(tl, t_setup, i, pmesh);
 
@@ -98,9 +100,10 @@ TaskCollection B_CleanupGMG::MakeSolverTaskCollection(Mesh* pmesh)
         auto t_solve_end = poisson_eq.Ax(tl, t_solve, md, md_p, md);
 
         auto t_apply_dB = tl.AddTask(t_solve_end, TF(ApplyPFace), md_p.get(), md.get());
+        std::cerr << "2block" << std::endl;
     }
 
     return tc;
 }
 
-#endif
+#endif // DISABLE_GMG_CLEANUP
