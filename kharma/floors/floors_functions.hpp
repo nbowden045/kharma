@@ -34,7 +34,7 @@
 #pragma once
 
 #include "floors.hpp"
-#include "onedw.hpp"
+#include "kastaun.hpp"
 
 /**
  * Device-side functions for applying GRMHD floors
@@ -161,6 +161,7 @@ KOKKOS_INLINE_FUNCTION int determine_floors(const GRCoordinates& G, const Variab
 
 #define FLOOR_ONE_ARGS const GRCoordinates& G, const VariablePack<Real>& P, const VarMap& m_p, const Real& gam, \
                         const int& k, const int& j, const int& i, const Real& rhoflr_max, const Real& uflr_max, \
+                        const Floors::Prescription& floors, \
                         const VariablePack<Real>& U, const VarMap& m_u
 
 /**
@@ -280,12 +281,10 @@ KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::normal>(FLOOR_ONE_ARGS)
     U(m_u.U1, k, j, i)  += T[1];
     U(m_u.U2, k, j, i)  += T[2];
     U(m_u.U3, k, j, i)  += T[3];
-    
-    // Recover primitive variables from conserved versions
-    // Kastaun would need real vals here...
-    const Floors::Prescription floor_tmp = {0}; 
-    return Inverter::u_to_p<Inverter::Type::onedw>(G, U, m_u, gam, k, j, i, P, m_p, Loci::center,
-                                                     floor_tmp, 8, 1e-8);
+
+    // Recover primitive variables from conserved versions.  Use Kastaun with safe parameters so we don't fail often
+    return Inverter::u_to_p<Inverter::Type::kastaun>(G, U, m_u, gam, k, j, i, P, m_p, Loci::center,
+                                                     floors, 20, 1e-12);
 }
 
 /**

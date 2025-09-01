@@ -36,6 +36,7 @@
 #include "decs.hpp"
 #include "domain.hpp"
 #include "floors.hpp"
+#include "floors_functions.hpp"
 #include "grmhd.hpp"
 #include "grmhd_functions.hpp"
 #include "inverter.hpp"
