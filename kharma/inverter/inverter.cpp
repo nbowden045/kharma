@@ -84,17 +84,19 @@ std::shared_ptr<KHARMAPackage> Inverter::Initialize(ParameterInput *pin, std::sh
     }
 
     // Fixup options
-    // Whether hitting a floor in the Kastaun inverter counts as a "failure"
-    // Avoids using the floors applied during the Kastaun solve, since they can be temperamental
-    bool floors_are_failures = pin->GetOrAddBoolean("inverter", "floors_are_failures", false);
-    params.Add("floors_are_failures", floors_are_failures);
-    // Whether the Kastaun inverter returns failure if it has revised rho or u due to floors,
-    // but can't find a new consistent solution to return sensible velocities.
-    bool bad_vels_are_failures = pin->GetOrAddBoolean("inverter", "bad_vels_are_failures", true);
-    params.Add("bad_vels_are_failures", bad_vels_are_failures);
+    if (use_kastaun) {
+        // Whether hitting a floor in the Kastaun inverter counts as a "failure"
+        // Avoids using the floors applied during the Kastaun solve, since they can be temperamental
+        bool floors_are_failures = pin->GetOrAddBoolean("inverter", "floors_are_failures", false);
+        params.Add("floors_are_failures", floors_are_failures);
+        // Whether the Kastaun inverter returns failure if it has revised rho or u due to floors,
+        // but can't find a new consistent solution to return sensible velocities.
+        bool bad_vels_are_failures = pin->GetOrAddBoolean("inverter", "bad_vels_are_failures", true);
+        params.Add("bad_vels_are_failures", bad_vels_are_failures);
+    }
 
     // Fix by averaging neighboring cells.  Enabled by default for 1Dw, but Kastaun failures are more dire
-    bool fix_average_neighbors = pin->GetOrAddBoolean("inverter", "fix_average_neighbors", !use_kastaun);
+    bool fix_average_neighbors = pin->GetOrAddBoolean("inverter", "fix_average_neighbors", true);
     params.Add("fix_average_neighbors", fix_average_neighbors);
     // Fix by replacing with floors, uvec=0. Usually a fallback for no neighbors,
     // but also used if Kastaun ever fails for some reason (generally negative or near-negative input, so atmo makes sense)

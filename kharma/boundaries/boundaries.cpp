@@ -298,9 +298,6 @@ std::shared_ptr<KHARMAPackage> KBoundaries::Initialize(ParameterInput *pin, std:
                 default:
                     break;
                 }
-                if (pin->GetInteger("parthenon/mesh", "nx3") != pin->GetInteger("parthenon/meshblock", "nx3") ||
-                    pin->GetInteger("parthenon/mesh", "nx3") == 1)
-                    throw std::runtime_error("Transmitting polar boundary conditions require 3D with one block in x3!");
                 if (pin->GetString("coordinates", "transform") == "fmks" || pin->GetString("coordinates", "transform") == "funky")
                     throw std::runtime_error("Transmitting polar boundary conditions require coordinates symmetric about theta=0!");
                 // TODO also check for wedge simulations x3<2pi
@@ -356,6 +353,19 @@ std::shared_ptr<KHARMAPackage> KBoundaries::Initialize(ParameterInput *pin, std:
                 throw std::runtime_error("Unknown boundary type: "+btype);
             }
         }
+    }
+
+    // If we've split in the phi direction or we're running in 2D
+    if (pin->GetInteger("parthenon/mesh", "nx3") != pin->GetInteger("parthenon/meshblock", "nx3") ||
+        pin->GetInteger("parthenon/mesh", "nx3") == 1) {
+        if (pin->GetString("boundaries", "inner_x3") == "transmitting" || pin->GetString("boundaries", "outer_x3") == "transmitting")
+            throw std::runtime_error("Transmitting polar boundary conditions require 3D with one block in x3!");
+        if (params.Get<bool>("cancel_U3_inner_x3") || params.Get<bool>("cancel_U3_outer_x3") ||
+            params.Get<bool>("cancel_T3_inner_x3") || params.Get<bool>("cancel_T3_outer_x3"))
+            throw std::runtime_error("Polar cancellations require 3D with one block in x3!");
+        if (packages->AllPackages().count("B_CT") &&
+            (params.Get<bool>("reconnect_B3_inner_x3") || params.Get<bool>("reconnect_B3_outer_x3")))
+            throw std::runtime_error("Polar reconnections require 3D with one block in x3!");
     }
 
     // Callbacks

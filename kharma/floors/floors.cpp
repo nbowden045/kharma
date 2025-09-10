@@ -65,10 +65,15 @@ std::shared_ptr<KHARMAPackage> Floors::Initialize(ParameterInput *pin, std::shar
     // TODO(BSP) automate/standardize parsing enums like this: classes w/tables like the flags?
     std::vector<std::string> allowed_floor_frames = {"normal", "fluid", "mixed",
                                                      "mixed_fluid_normal", "mixed_normal_drift", "drift"};
-    std::string frame_s = pin->GetOrAddString("floors", "frame", "drift", allowed_floor_frames);
+    std::string frame_s = pin->GetOrAddString("floors", "frame", "normal", allowed_floor_frames);
     InjectionFrame frame;
     if (frame_s == "normal") {
-        frame = InjectionFrame::normal;
+        if (pin->GetOrAddString("inverter", "type", "kastaun") == "onedw") {
+            frame = InjectionFrame::normal_onedw;
+        } else {
+            // Use Kastaun unless we specified onedw inverter
+            frame = InjectionFrame::normal_kastaun;
+        }
     } else if (frame_s == "fluid") {
         frame = InjectionFrame::fluid;
     } else if (frame_s == "mixed" || frame_s == "mixed_fluid_normal") {
@@ -182,7 +187,7 @@ TaskStatus Floors::ApplyInitialFloors(ParameterInput *pin, MeshBlockData<Real> *
             // Initial floors, so the radius-dependence of floors don't matter that much. 
             int fflag = determine_floors(G, P, m_p, gam, k, j, i, floors, floors, rhoflr_max, uflr_max);
             if (fflag) {
-                apply_floors<InjectionFrame::fluid>(G, P, m_p, gam, k, j, i, rhoflr_max, uflr_max, U, m_u);
+                apply_floors<InjectionFrame::fluid>(G, P, m_p, gam, k, j, i, rhoflr_max, uflr_max, floors, U, m_u);
                 apply_ceilings(G, P, m_p, gam, k, j, i, floors, floors, U, m_u);
                 // P->U for any modified zones
                 Flux::p_to_u_mhd(G, P, m_p, emhd_params, gam, k, j, i, U, m_u, Loci::center);
@@ -234,8 +239,10 @@ TaskStatus Floors::ApplyGRMHDFloors(MeshData<Real> *md, IndexDomain domain)
 {
     auto pmesh = md->GetMeshPointer();
     const auto& pars = pmesh->packages.Get("Floors")->AllParams();
-    if (pars.Get<InjectionFrame>("frame") == InjectionFrame::normal) {
-        return ApplyFloorsInFrame<InjectionFrame::normal>(md, domain);
+    if (pars.Get<InjectionFrame>("frame") == InjectionFrame::normal_kastaun) {
+        return ApplyFloorsInFrame<InjectionFrame::normal_kastaun>(md, domain);
+    } else if (pars.Get<InjectionFrame>("frame") == InjectionFrame::normal_onedw) {
+        return ApplyFloorsInFrame<InjectionFrame::normal_onedw>(md, domain);
     } else if (pars.Get<InjectionFrame>("frame") == InjectionFrame::fluid) {
         return ApplyFloorsInFrame<InjectionFrame::fluid>(md, domain);
     } else if (pars.Get<InjectionFrame>("frame") == InjectionFrame::mixed_fluid_normal) {
