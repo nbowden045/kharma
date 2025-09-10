@@ -94,6 +94,13 @@ std::shared_ptr<KHARMAPackage> B_CT::Initialize(ParameterInput *pin, std::shared
                                             Metadata::GetUserFlag("MHD"), Metadata::GetUserFlag("Explicit"), Metadata::Vector};
     std::vector<MetadataFlag> flags_cons = {Metadata::Real, Metadata::Cell, Metadata::Derived, Metadata::Conserved, Metadata::WithFluxes,
                                             Metadata::GetUserFlag("MHD"), Metadata::GetUserFlag("Explicit"), Metadata::Vector};
+
+    // KHARMA now (vaguely) supports restarting from dump (.phdf) files.
+    // To do so we need to read cell-centered primitive B and interpolate to faces, as we do with iharm3d restart files
+    if (pin->GetOrAddBoolean("b_field", "restart_from_prims", false)) {
+        flags_prim.push_back(Metadata::Restart);
+    }
+
     std::vector<int> s_vector({NVEC});
     m = Metadata(flags_prim, s_vector);
     pkg->AddField("prims.B", m);
