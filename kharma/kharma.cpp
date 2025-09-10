@@ -381,7 +381,7 @@ Packages_t KHARMA::ProcessPackages(std::unique_ptr<ParameterInput> &pin)
     // 2. Prefer B_Flux_CT otherwise since it's well-tested
     auto t_b_field = t_none;
     bool multilevel = pin->GetOrAddString("parthenon/mesh", "refinement", "none") != "none";
-    std::string b_field_solver = pin->GetOrAddString("b_field", "solver",  multilevel ? "face_ct" : "flux_ct");
+    std::string b_field_solver = pin->GetOrAddString("b_field", "solver",  "face_ct");
     if (b_field_solver == "none" || b_field_solver == "cleanup" || b_field_solver == "b_cleanup") {
         // Don't add a B field here
     } else if (b_field_solver == "constrained_transport" || b_field_solver == "face_ct") {
