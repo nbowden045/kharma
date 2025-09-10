@@ -96,7 +96,7 @@ std::shared_ptr<KHARMAPackage> Inverter::Initialize(ParameterInput *pin, std::sh
     }
 
     // Fix by averaging neighboring cells.  Enabled by default for 1Dw, but Kastaun failures are more dire
-    bool fix_average_neighbors = pin->GetOrAddBoolean("inverter", "fix_average_neighbors", true);
+    bool fix_average_neighbors = pin->GetOrAddBoolean("inverter", "fix_average_neighbors", !use_kastaun);
     params.Add("fix_average_neighbors", fix_average_neighbors);
     // Fix by replacing with floors, uvec=0. Usually a fallback for no neighbors,
     // but also used if Kastaun ever fails for some reason (generally negative or near-negative input, so atmo makes sense)

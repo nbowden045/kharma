@@ -125,15 +125,13 @@ std::shared_ptr<KHARMAPackage> Flux::Initialize(ParameterInput *pin, std::shared
         throw std::runtime_error("Not enough ghost zones for specified reconstruction!");
     }
 
-    // Floors package *has* been initialized if it's going to be
-    // Apply floors for high-order reconstructions
-    bool default_recon_floors = packages->AllPackages().count("Floors") &&
-                                (recon == "weno5" || recon == "weno5_linear" || recon == "mp5");
-    bool reconstruction_floors = pin->GetOrAddBoolean("flux", "reconstruction_floors", default_recon_floors);
-    params.Add("reconstruction_floors", reconstruction_floors);
-
-    bool reconstruction_fallback = pin->GetOrAddBoolean("flux", "reconstruction_fallback", false);
+    // Fallback to TVD reconstruction when these algorithms reconstruct something outside the floors
+    bool default_recon_fallback = (recon == "weno5" || recon == "weno5_linear" || recon == "mp5");
+    bool reconstruction_fallback = pin->GetOrAddBoolean("flux", "reconstruction_fallback", default_recon_fallback);
     params.Add("reconstruction_fallback", reconstruction_fallback);
+    // Alternatively just apply the geometric floors in fluid frame like a heathen
+    bool reconstruction_floors = pin->GetOrAddBoolean("flux", "reconstruction_floors", false);
+    params.Add("reconstruction_floors", reconstruction_floors);
 
     // When calculating the fluxes, replace perpendicular fields (e.g. B2 at F2) with
     // the value already present at the face
