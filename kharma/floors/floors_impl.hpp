@@ -87,7 +87,9 @@ TaskStatus ApplyFloorsInFrame(MeshData<Real> *md, IndexDomain domain)
                                             floor_vals(b, rhofi, k, j, i), floor_vals(b, ufi, k, j, i),
                                             floors, U(b), m_u);
                     } else {
-                        pflag_l = apply_floors<InjectionFrame::normal>(G, P(b), m_p, gam, k, j, i,
+                        // TODO should mixed frames respect Kastaun vs 1Dw?
+                        // Since no prior simulations use mixed frames thus requiring back-compat, I said no
+                        pflag_l = apply_floors<InjectionFrame::normal_kastaun>(G, P(b), m_p, gam, k, j, i,
                                             floor_vals(b, rhofi, k, j, i), floor_vals(b, ufi, k, j, i),
                                             floors, U(b), m_u);
                     }
@@ -101,7 +103,7 @@ TaskStatus ApplyFloorsInFrame(MeshData<Real> *md, IndexDomain domain)
                                             floor_vals(b, rhofi, k, j, i), floor_vals(b, ufi, k, j, i),
                                             floors, U(b), m_u);
                     } else {
-                        pflag_l = apply_floors<InjectionFrame::normal>(G, P(b), m_p, gam, k, j, i,
+                        pflag_l = apply_floors<InjectionFrame::normal_kastaun>(G, P(b), m_p, gam, k, j, i,
                                             floor_vals(b, rhofi, k, j, i), floor_vals(b, ufi, k, j, i),
                                             floors, U(b), m_u);
                     }
