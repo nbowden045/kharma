@@ -451,8 +451,8 @@ void Flux::AddGeoSource(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDomain d
 
 TaskStatus Flux::CheckCtop(MeshData<Real> *md)
 {
-    Reductions::DomainReduction<Reductions::Var::nan_ctop, int>(md, UserHistoryOperation::sum, 0);
-    Reductions::DomainReduction<Reductions::Var::zero_ctop, int>(md, UserHistoryOperation::sum, 1);
+    Reductions::DomainReduction<Reductions::Var::nan_ctop, UserHistoryOperation::sum, int>(md, 0);
+    Reductions::DomainReduction<Reductions::Var::zero_ctop, UserHistoryOperation::sum, int>(md, 1);
     return TaskStatus::complete;
 }
 
