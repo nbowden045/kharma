@@ -453,9 +453,9 @@ TaskStatus PostStepDiagnostics(const SimTime& tm, MeshData<Real> *md)
         // Not sure when I'd do the check to hide latency, it's a step-end sort of deal
         // Just as well it's behind extra_checks 2
         // This may happen while ch0-1 are in flight from floors, but ch2-4 are now reusable
-        Reductions::DomainReduction<Reductions::Var::neg_rho, int>(md, UserHistoryOperation::sum, 2);
-        Reductions::DomainReduction<Reductions::Var::neg_u, int>(md, UserHistoryOperation::sum, 3);
-        Reductions::DomainReduction<Reductions::Var::neg_rhout, int>(md, UserHistoryOperation::sum, 4);
+        Reductions::DomainReduction<Reductions::Var::neg_rho, UserHistoryOperation::sum, int>(md, 2);
+        Reductions::DomainReduction<Reductions::Var::neg_u, UserHistoryOperation::sum, int>(md, 3);
+        Reductions::DomainReduction<Reductions::Var::neg_rhout, UserHistoryOperation::sum, int>(md, 4);
         int nless_rho = Reductions::Check<int>(md, 2);
         int nless_u = Reductions::Check<int>(md, 3);
         int nless_rhout = Reductions::Check<int>(md, 4);
