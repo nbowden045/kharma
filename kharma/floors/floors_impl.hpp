@@ -69,9 +69,6 @@ TaskStatus ApplyFloorsInFrame(MeshData<Real> *md, IndexDomain domain)
     const Floors::Prescription floors = pmb0->packages.Get("Floors")->Param<Floors::Prescription>("prescription");
     const Floors::Prescription floors_inner = pmb0->packages.Get("Floors")->Param<Floors::Prescription>("prescription_inner");
 
-    // Determine floors
-    DetermineGRMHDFloors(md, domain, floors, floors_inner);
-
     const IndexRange3 b = KDomain::GetRange(md, domain);
     const IndexRange block = IndexRange{0, P.GetDim(5) - 1};
     pmb0->par_for("apply_floors", block.s, block.e, b.ks, b.ke, b.js, b.je, b.is, b.ie,
