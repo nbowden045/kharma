@@ -345,7 +345,7 @@ TaskStatus ReadIharmRestart(std::shared_ptr<MeshBlockData<Real>>& rc, ParameterI
                          fstop[2] - fstart[2] + 1,
                          fstop[3] - fstart[3] + 1};
     // If we overran an index on the left, we need to leave blank rows, potentially filled w/periodic vals
-    hsize_t mstart[4] = {0, (gks < 0) ? -gks : 0, (gjs < 0) ? -gjs : 0, (gis < 0) ? -gis : 0};
+    hsize_t mstart[4] = {0, (gks < 0) ? m::abs(gks) : 0, (gjs < 0) ? m::abs(gjs) : 0, (gis < 0) ? m::abs(gis) : 0};
     // Total memory size is never truncated
     // This calculation produces XxYx2 arrays for 2D sims w/linear interp but that's fine
     hsize_t nmk = gke-gks+1, nmj = gje-gjs+1, nmi = gie-gis+1;
