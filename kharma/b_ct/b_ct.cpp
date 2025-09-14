@@ -118,12 +118,6 @@ std::shared_ptr<KHARMAPackage> B_CT::Initialize(ParameterInput *pin, std::shared
         pkg->AddField("B_CT.cemf", m);
     }
 
-    // INTERNAL SMR
-    // Hyerin (04/04/24) averaged B fields needed for ismr
-    // ISMR cache: not evolved, immediately copied to fluid state after averaging
-    m = Metadata({Metadata::Real, Metadata::Face, Metadata::Derived, Metadata::OneCopy});
-    pkg->AddField("ismr.fB_avg", m);
-
     // CALLBACKS
 
     // We implement a source term replacement, rather than addition,
@@ -509,9 +503,10 @@ TaskStatus B_CT::DerefinePoles(MeshData<Real> *md)
 
     // Figure out indices
     int ng = Globals::nghost;
-    for (auto &pmb : pmesh->block_list) {
+    for (int iblock=0; iblock < md->NumBlocks(); iblock++) {
+        auto& rc = md->GetBlockData(iblock);
+        auto pmb = rc->GetBlockPointer();
         const auto& G = pmb->coords;
-        auto& rc = pmb->meshblock_data.Get();
         auto B_Uf = rc->PackVariables(std::vector<std::string>{"cons.fB"});
         auto B_avg = rc->PackVariables(std::vector<std::string>{"ismr.fB_avg"});
         for (int i = 0; i < BOUNDARY_NFACES; i++) {
@@ -524,10 +519,10 @@ TaskStatus B_CT::DerefinePoles(MeshData<Real> *md)
                 // indices
                 // TODO also get ranges in cells from the beginning rather than using j_p & calculating j_c
                 IndexRange3 bCC = KDomain::GetRange(rc, IndexDomain::interior, CC);
+                // Note these are invalid in X2! We use them only for X1/X3 directions
                 IndexRange3 bF1 = KDomain::GetRange(rc, domain, F1, ng, -ng);
-                IndexRange3 bF2 = KDomain::GetRange(rc, domain, F2, (binner) ? 0 : -1, (binner) ? 1 : 0, false);
                 IndexRange3 bF3 = KDomain::GetRange(rc, domain, F3, ng, -ng);
-                const int j_f = (binner) ? bF2.je : bF2.js; // last physical face
+                const int j_f = (binner) ? bCC.js : bCC.je + 1; // last physical face
                 const int jps = (binner) ? j_f + (nlevels - 1) : j_f - (nlevels - 1); // start of the lowest level of derefinement
                 const IndexRange j_p = IndexRange{(binner) ? j_f : jps, (binner) ? jps : j_f};  // Range of x2 to be de-refined
                 const int offset = (binner) ? 1 : -1; // offset to read the physical face values

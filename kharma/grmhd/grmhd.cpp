@@ -301,7 +301,8 @@ Real EstimateTimestep(MeshData<Real> *md)
     const uint ismr_nlevels = (ismr_poles) ? pmesh->packages.Get("ISMR")->Param<uint>("nlevels") : 0;
 
     // TODO version preserving location, with switch to keep this fast one
-    // TODO maybe split normal, ISMR timesteps? Excised pole/recalculated ctop too?
+    // TODO maybe split normal vs funky/additional timesteps (ISMR, excised polar)?
+    // TODO Make the base calculation a mesh-wise function?
     double min_ndt = std::numeric_limits<double>::max();
     for (auto &pmb : pmesh->block_list) {
         auto rc = pmb->meshblock_data.Get(md->StageName()).get();
@@ -319,6 +320,14 @@ Real EstimateTimestep(MeshData<Real> *md)
                 const auto& G = cmax.GetCoords();
                 int ismr_factor = 1;
                 double courant_limit = 1.0;
+                if (ismr_poles && polar_inner_x2 && j < (b.js + ismr_nlevels)) {
+                    ismr_factor = m::pow(2, ismr_nlevels - (j - b.js));
+                    courant_limit = 0.5;
+                }
+                if (ismr_poles && polar_outer_x2 && j > (b.je - ismr_nlevels)) {
+                    ismr_factor = m::pow(2, ismr_nlevels - (b.je - j));
+                    courant_limit = 0.5;
+                }
 
                 double ndt_zone = courant_limit / (1 / (G.Dxc<1>(i) /  m::max(cmax(V1, k, j, i), cmin(V1, k, j, i))) +
                                     1 / (G.Dxc<2>(j) /  m::max(cmax(V2, k, j, i), cmin(V2, k, j, i))) +
@@ -522,7 +531,7 @@ void CancelBoundaryU3(MeshBlockData<Real> *rc, IndexDomain domain, bool coarse)
                 parthenon::par_for_inner(member, bi.ks, bi.ke,
                     [&](const int& k) {
                     Inverter::u_to_p<Inverter::Type::kastaun>(G, U, m_u, gam, k, jf, i, P, m_p, Loci::center,
-                                                                floors, 25, 1e-12);
+                                                              25, 1e-12);
                     }
                 );
             }
@@ -619,7 +628,7 @@ void CancelBoundaryT3(MeshBlockData<Real> *rc, IndexDomain domain, bool coarse)
                     U(m_u.U3, k, jf, i) -= T3_avg;
                     // Recover primitive GRMHD variables from our modified U
                     Inverter::u_to_p<Inverter::Type::kastaun>(G, U, m_u, gam, k, jf, i, P, m_p, Loci::center,
-                                                              floors, 25, 1e-12);
+                                                              25, 1e-12);
                     // Floor them
                     int fflag = Floors::apply_geo_floors(G, P, m_p, gam, k, jf, i, floors, floors, Loci::center);
                     // Recalculate U on anything we floored
@@ -697,10 +706,6 @@ void UpdateAveragedCtop(MeshData<Real> *md)
                             }
                         }
                     );
-
-                    if (params.Get<bool>("excise_flux_" + bname)) {
-
-                    }
                 }
             }
         }

@@ -106,6 +106,10 @@ std::shared_ptr<KHARMAPackage> Floors::Initialize(ParameterInput *pin, std::shar
     else
         params.Add("prescription_inner", MakePrescriptionInner(pin, MakePrescription(pin)), "floors");
 
+    // Sometimes we want the floors package, but don't want to apply anything, for tests
+    bool disable_call = pin->GetOrAddBoolean("floors", "disable_call", false);
+    params.Add("disable_call", disable_call);
+
     // These preserve floor values between the "mark" pass and the actual floor application
     // We need them even if floors are disabled, to apply initial values based on some prescription
     // as a part of problem setup
@@ -122,7 +126,9 @@ std::shared_ptr<KHARMAPackage> Floors::Initialize(ParameterInput *pin, std::shar
 
     // TODO(BSP) THIS IS THE ONLY MeshApplyFloors.  Any others will NOT BE CALLED.
     // Use BlockApplyFloors in your packages or fix Packages::MeshApplyFloors
-    pkg->MeshApplyFloors = Floors::ApplyGRMHDFloors;
+    if (!disable_call) {
+        pkg->MeshApplyFloors = Floors::ApplyGRMHDFloors;
+    }
     pkg->PostStepDiagnosticsMesh = Floors::PostStepDiagnostics;
 
     // List (vector) of HistoryOutputVars that will all be enrolled as output variables
@@ -187,7 +193,7 @@ TaskStatus Floors::ApplyInitialFloors(ParameterInput *pin, MeshBlockData<Real> *
             // Initial floors, so the radius-dependence of floors don't matter that much. 
             int fflag = determine_floors(G, P, m_p, gam, k, j, i, floors, floors, rhoflr_max, uflr_max);
             if (fflag) {
-                apply_floors<InjectionFrame::fluid>(G, P, m_p, gam, k, j, i, rhoflr_max, uflr_max, floors, U, m_u);
+                apply_floors<InjectionFrame::fluid>(G, P, m_p, gam, k, j, i, rhoflr_max, uflr_max, U, m_u);
                 apply_ceilings(G, P, m_p, gam, k, j, i, floors, floors, U, m_u);
                 // P->U for any modified zones
                 Flux::p_to_u_mhd(G, P, m_p, emhd_params, gam, k, j, i, U, m_u, Loci::center);
