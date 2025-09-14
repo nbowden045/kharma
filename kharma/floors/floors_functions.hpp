@@ -316,6 +316,13 @@ KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::normal_kastaun>(FLOOR_ON
                                                      25, 1e-12);
 }
 
+// These are implemented as special cases in the kernel in floors_impl.hpp
+// We define them here as no-ops so they resolve in the general template call-through
+template<>
+KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::mixed_fluid_normal>(FLOOR_ONE_ARGS) { return 0; }
+template<>
+KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::mixed_normal_drift>(FLOOR_ONE_ARGS) { return 0; }
+
 /**
  * Apply just the geometric floors to a set of local primitives.
  * Specifically called after reconstruction when using non-TVD schemes, e.g. WENO5.
