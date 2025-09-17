@@ -43,6 +43,7 @@
 #include "boundaries.hpp"
 #include "current.hpp"
 #include "floors.hpp"
+#include "floors_functions.hpp"
 #include "flux.hpp"
 #include "gr_coordinates.hpp"
 #include "grmhd_functions.hpp"
@@ -295,8 +296,14 @@ Real EstimateTimestep(MeshData<Real> *md)
     // Actually compute the timestep if we have to
     const IndexRange3 b = KDomain::GetRange(md, IndexDomain::interior);
 
+    // Added by Hyerin (03/07/24)
+    // Internal SMR adds a factor to dx3 at poles based on larger cell width
+    // TODO distinguish polar from other ISMR if more modes are added
+    const bool ismr_poles = pmesh->packages.AllPackages().count("ISMR");
+    const uint ismr_nlevels = (ismr_poles) ? pmesh->packages.Get("ISMR")->Param<uint>("nlevels") : 0;
+
     // TODO version preserving location, with switch to keep this fast one
-    // TODO maybe split normal, ISMR timesteps? Excised pole/recalculated ctop too?
+    // TODO maybe split normal vs ISMR (/Excised pole/etc) timesteps? Make normal calculation mesh-wise?
     double min_ndt = std::numeric_limits<double>::max();
     for (auto &pmb : pmesh->block_list) {
         auto rc = pmb->meshblock_data.Get(md->StageName()).get();
@@ -319,6 +326,14 @@ Real EstimateTimestep(MeshData<Real> *md)
                 int ismr_factor = 1;
                 double excise_factor = 1.0;
                 double courant_limit = 1.0;
+                if (ismr_poles && polar_inner_x2 && j < (b.js + ismr_nlevels)) {
+                    ismr_factor = m::pow(2, ismr_nlevels - (j - b.js));
+                    courant_limit = 0.5;
+                }
+                if (ismr_poles && polar_outer_x2 && j > (b.je - ismr_nlevels)) {
+                    ismr_factor = m::pow(2, ismr_nlevels - (b.je - j));
+                    courant_limit = 0.5;
+                }
 
                 if (excise_inner_x2 && polar_inner_x2 && j == b.js) {
                     excise_factor = 0.5;
@@ -466,9 +481,9 @@ TaskStatus PostStepDiagnostics(const SimTime& tm, MeshData<Real> *md)
         // Not sure when I'd do the check to hide latency, it's a step-end sort of deal
         // Just as well it's behind extra_checks 2
         // This may happen while ch0-1 are in flight from floors, but ch2-4 are now reusable
-        Reductions::DomainReduction<Reductions::Var::neg_rho, int>(md, UserHistoryOperation::sum, 2);
-        Reductions::DomainReduction<Reductions::Var::neg_u, int>(md, UserHistoryOperation::sum, 3);
-        Reductions::DomainReduction<Reductions::Var::neg_rhout, int>(md, UserHistoryOperation::sum, 4);
+        Reductions::DomainReduction<Reductions::Var::neg_rho, UserHistoryOperation::sum, int>(md, 2);
+        Reductions::DomainReduction<Reductions::Var::neg_u, UserHistoryOperation::sum, int>(md, 3);
+        Reductions::DomainReduction<Reductions::Var::neg_rhout, UserHistoryOperation::sum, int>(md, 4);
         int nless_rho = Reductions::Check<int>(md, 2);
         int nless_u = Reductions::Check<int>(md, 3);
         int nless_rhout = Reductions::Check<int>(md, 4);
@@ -528,7 +543,7 @@ void CancelBoundaryU3(MeshBlockData<Real> *rc, IndexDomain domain, bool coarse)
                 parthenon::par_for_inner(member, bi.ks, bi.ke,
                     [&](const int& k) {
                     Inverter::u_to_p<Inverter::Type::kastaun>(G, U, m_u, gam, k, jf, i, P, m_p, Loci::center,
-                                                                floors, 8, 1e-8);
+                                                                floors, 25, 1e-12);
                     }
                 );
             }
@@ -625,7 +640,7 @@ void CancelBoundaryT3(MeshBlockData<Real> *rc, IndexDomain domain, bool coarse)
                     U(m_u.U3, k, jf, i) -= T3_avg;
                     // Recover primitive GRMHD variables from our modified U
                     Inverter::u_to_p<Inverter::Type::kastaun>(G, U, m_u, gam, k, jf, i, P, m_p, Loci::center,
-                                                              floors, 8, 1e-8);
+                                                              floors, 25, 1e-12);
                     // Floor them
                     int fflag = Floors::apply_geo_floors(G, P, m_p, gam, k, jf, i, floors, floors, Loci::center);
                     // Recalculate U on anything we floored
