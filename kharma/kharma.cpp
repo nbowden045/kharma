@@ -51,7 +51,9 @@
 #include "electrons.hpp"
 #include "implicit.hpp"
 #include "inverter.hpp"
+#include "ismr.hpp"
 #include "floors.hpp"
+#include "flux.hpp"
 #include "grmhd.hpp"
 #include "reductions.hpp"
 #include "emhd.hpp"
@@ -176,6 +178,9 @@ void KHARMA::FixParameters(ParameterInput *pin, bool is_parthenon_restart)
     CoordinateEmbedding tmp_coords(pin);
     // Record whether we're in spherical as we'll need that
     pin->SetBoolean("coordinates", "spherical", tmp_coords.is_spherical());
+    // Record event horizon so it's available in future init w/o building another coords
+    // For non-spherical or Newtonian this is 0
+    pin->SetReal("coordinates", "r_eh", tmp_coords.get_horizon());
 
     // Do a bunch of autodetection/setting in spherical coordinates
     // Note frequent use of "GetOrAddX": this sets a default if not present but allows overriding
@@ -208,9 +213,7 @@ void KHARMA::FixParameters(ParameterInput *pin, bool is_parthenon_restart)
                     }
                 } else {
                     int nx1 = pin->GetInteger("parthenon/mesh", "nx1");
-                    // Allow overriding Rhor for bondi_viscous problem
-                    const GReal Rhor = pin->GetOrAddReal("coordinates", "Rhor", tmp_coords.get_horizon());
-                    const GReal x1hor = tmp_coords.r_to_native(Rhor);
+                    const GReal x1hor = tmp_coords.r_to_native(tmp_coords.get_horizon());
 
                     // Set Rin such that we have 5 zones completely inside the event horizon
                     // If xeh = log(Rhor), xin = log(Rin), and xout = log(Rout),
@@ -241,6 +244,9 @@ void KHARMA::FixParameters(ParameterInput *pin, bool is_parthenon_restart)
         pin->GetOrAddString("boundaries", "inner_x3", "periodic");
         pin->GetOrAddString("boundaries", "outer_x3", "periodic");
     } else {
+        // This will never happen in Minkowski, but sometimes is checked later
+        pin->SetReal("coordinates", "r_in", 0.);
+        pin->SetBoolean("coordinates", "domain_intersects_eh", false);
         // We can set reasonable default boundary conditions for Cartesian sims,
         // but not default domain bounds
         pin->GetOrAddString("boundaries", "inner_x1", "periodic");
@@ -368,14 +374,13 @@ Packages_t KHARMA::ProcessPackages(std::unique_ptr<ParameterInput> &pin)
     // Reductions, needed by most other packages
     auto t_reductions = tl.AddTask(t_none, KHARMA::AddPackage, packages, Reductions::Initialize, pin.get());
 
-    // B field solvers, to ensure divB ~= 0.
+    // B field solvers, to preserve divB ~= 0.
     // Bunch of logic here: basically we want to load <=1 solver with an encoded order of preference:
     // 0. Anything user-specified
-    // 1. Prefer B_CT if AMR since it's compatible
-    // 2. Prefer B_Flux_CT otherwise since it's well-tested
+    // 1. Prefer B_CT, it's better tested and more flexible
     auto t_b_field = t_none;
     bool multilevel = pin->GetOrAddString("parthenon/mesh", "refinement", "none") != "none";
-    std::string b_field_solver = pin->GetOrAddString("b_field", "solver",  multilevel ? "face_ct" : "flux_ct");
+    std::string b_field_solver = pin->GetOrAddString("b_field", "solver",  "face_ct");
     if (b_field_solver == "none" || b_field_solver == "cleanup" || b_field_solver == "b_cleanup") {
         // Don't add a B field here
     } else if (b_field_solver == "constrained_transport" || b_field_solver == "face_ct") {
@@ -430,6 +435,11 @@ Packages_t KHARMA::ProcessPackages(std::unique_ptr<ParameterInput> &pin)
 
     // Flux temporaries must be full size
     KHARMA::AddPackage(packages, Flux::Initialize, pin.get());
+
+    // ISMR temporaries must be full size
+    if (pin->GetOrAddBoolean("ismr", "on", false)) {
+        KHARMA::AddPackage(packages, ISMR::Initialize, pin.get());
+    }
 
     // And any dirichlet/constant boundaries
     // TODO avoid init if Parthenon will be handling all boundaries?

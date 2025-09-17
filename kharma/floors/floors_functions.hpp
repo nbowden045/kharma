@@ -34,6 +34,8 @@
 #pragma once
 
 #include "floors.hpp"
+// For template specializations since inverter needs floors too
+#include "kastaun.hpp"
 #include "onedw.hpp"
 
 /**
@@ -159,9 +161,9 @@ KOKKOS_INLINE_FUNCTION int determine_floors(const GRCoordinates& G, const Variab
     return fflag;
 }
 
-#define FLOOR_ONE_ARGS const GRCoordinates& G, const VariablePack<Real>& P, const VarMap& m_p, \
-                        const Real& gam, \
+#define FLOOR_ONE_ARGS const GRCoordinates& G, const VariablePack<Real>& P, const VarMap& m_p, const Real& gam, \
                         const int& k, const int& j, const int& i, const Real& rhoflr_max, const Real& uflr_max, \
+                        const Floors::Prescription& floors, \
                         const VariablePack<Real>& U, const VarMap& m_u
 
 /**
@@ -257,8 +259,10 @@ KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::drift>(FLOOR_ONE_ARGS)
     return 0;
 }
 
+// There's a way to avoid code duplication here, but it imposes more template madness
+// on everyone else by templating floors *again*, and we don't need the convex set
 template<>
-KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::normal>(FLOOR_ONE_ARGS)
+KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::normal_onedw>(FLOOR_ONE_ARGS)
 {
     // Add the material in the normal observer frame.
     // 1. Calculate how much material we're adding.
@@ -281,37 +285,40 @@ KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::normal>(FLOOR_ONE_ARGS)
     U(m_u.U1, k, j, i)  += T[1];
     U(m_u.U2, k, j, i)  += T[2];
     U(m_u.U3, k, j, i)  += T[3];
-    
-    // Recover primitive variables from conserved versions
-    // Kastaun would need real vals here...
-    const Floors::Prescription floor_tmp = {0}; 
+
+    // Recover primitive variables from conserved versions.  Use Kastaun with safe parameters so we don't fail often
     return Inverter::u_to_p<Inverter::Type::onedw>(G, U, m_u, gam, k, j, i, P, m_p, Loci::center,
-                                                     floor_tmp, 8, 1e-8);
+                                                     floors, 8, 1e-8);
 }
 
 template<>
-KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::mixed_fluid_normal>(FLOOR_ONE_ARGS)
+KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::normal_kastaun>(FLOOR_ONE_ARGS)
 {
-    // TODO(BSP) thread through frame_switch option
-    if (G.r(k, j, i) > 50.) {
-        return apply_floors<InjectionFrame::fluid>(G, P, m_p, gam, k, j, i, rhoflr_max, uflr_max, U, m_u);
-    } else {
-        return apply_floors<InjectionFrame::normal>(G, P, m_p, gam, k, j, i, rhoflr_max, uflr_max, U, m_u);
-    }
-}
+    // Add the material in the normal observer frame.
+    // 1. Calculate how much material we're adding.
+    // This is an estimate, as it's what we'd have to do in fluid frame
+    const Real rho_add    = m::max(0., rhoflr_max - P(m_p.RHO, k, j, i));
+    const Real u_add      = m::max(0., uflr_max - P(m_p.UU, k, j, i));
+    const Real uvec[NVEC] = {0}, B[NVEC] = {0};
 
-template<>
-KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::mixed_fluid_drift>(FLOOR_ONE_ARGS)
-{
-    // TODO(BSP) thread through frame_switch option
-    FourVectors Dtmp;
-    GRMHD::calc_4vecs(G, P, m_p, k, j, i, Loci::center, Dtmp);
-    Real beta = dot(Dtmp.bcon, Dtmp.bcov) / (2 * (gam - 1.) * P(m_p.UU, k, j, i));
-    if (beta > 10.) {
-        return apply_floors<InjectionFrame::drift>(G, P, m_p, gam, k, j, i, rhoflr_max, uflr_max, U, m_u);
-    } else {
-        return apply_floors<InjectionFrame::normal>(G, P, m_p, gam, k, j, i, rhoflr_max, uflr_max, U, m_u);
-    }
+    // 2. Calculate the increase in conserved mass/energy corresponding to the new material.
+    Real rho_ut, T[GR_DIM];
+    GRMHD::p_to_u_mhd(G, rho_add, u_add, uvec, B, gam, k, j, i, rho_ut, T, Loci::center);
+
+    // 3. Add new conserved mass/energy to the current "conserved" state.
+    // Also add to the local primitives as a guess
+    P(m_p.RHO, k, j, i) += rho_add;
+    P(m_p.UU, k, j, i)  += u_add;
+    // Add any velocity here
+    U(m_u.RHO, k, j, i) += rho_ut;
+    U(m_u.UU, k, j, i)  += T[0]; // Note that m_u.U1 != m_u.UU + 1 necessarily
+    U(m_u.U1, k, j, i)  += T[1];
+    U(m_u.U2, k, j, i)  += T[2];
+    U(m_u.U3, k, j, i)  += T[3];
+
+    // Recover primitive variables from conserved versions.  Use Kastaun with safe parameters so we don't fail often
+    return Inverter::u_to_p<Inverter::Type::kastaun>(G, U, m_u, gam, k, j, i, P, m_p, Loci::center,
+                                                     floors, 25, 1e-12);
 }
 
 /**

@@ -1,25 +1,25 @@
-/* 
+/*
  *  File: simple_step.cpp
- *  
+ *
  *  BSD 3-Clause License
- *  
+ *
  *  Copyright (c) 2020, AFD Group at UIUC
  *  All rights reserved.
- *  
+ *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted provided that the following conditions are met:
- *  
+ *
  *  1. Redistributions of source code must retain the above copyright notice, this
  *     list of conditions and the following disclaimer.
- *  
+ *
  *  2. Redistributions in binary form must reproduce the above copyright notice,
  *     this list of conditions and the following disclaimer in the documentation
  *     and/or other materials provided with the distribution.
- *  
+ *
  *  3. Neither the name of the copyright holder nor the names of its
  *     contributors may be used to endorse or promote products derived from
  *     this software without specific prior written permission.
- *  
+ *
  *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  *  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  *  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -52,7 +52,7 @@ TaskCollection KHARMADriver::MakeSimpleTaskCollection(BlockList_t &blocks, int s
 
     // Allocate the fluid states ("containers") we need for each block
     for (auto& pmb : blocks) {
-        auto &base = pmb->meshblock_data.Get();
+        auto &base = pmb->meshblock_data.Get("base");
         if (stage == 1) {
             pmb->meshblock_data.Add("dUdt", base);
             for (int i = 1; i < integrator->nstages; i++)
@@ -68,7 +68,7 @@ TaskCollection KHARMADriver::MakeSimpleTaskCollection(BlockList_t &blocks, int s
     TaskRegion &single_tasklist_per_pack_region = tc.AddRegion(num_partitions);
     for (int i = 0; i < num_partitions; i++) {
         auto &tl = single_tasklist_per_pack_region[i];
-        // Container names: 
+        // Container names:
         // '_full_step_init' refers to the fluid state at the start of the full time step (Si in iharm3d)
         // '_sub_step_init' refers to the fluid state at the start of the sub step (Ss in iharm3d)
         // '_sub_step_final' refers to the fluid state at the end of the sub step (Sf in iharm3d)
@@ -86,7 +86,7 @@ TaskCollection KHARMADriver::MakeSimpleTaskCollection(BlockList_t &blocks, int s
         // Any package modifications to the fluxes.  e.g.:
         // 1. CT calculations for B field transport
         // 2. Zero fluxes through poles
-        // etc 
+        // etc
         auto t_fix_flux = tl.AddTask(t_fluxes, Packages::FixFlux, md_sub_step_init.get());
 
         // Apply the fluxes to calculate a change in cell-centered values "md_flux_src"
@@ -128,30 +128,29 @@ TaskCollection KHARMADriver::MakeSimpleTaskCollection(BlockList_t &blocks, int s
         KHARMADriver::AddBoundarySync(t_floors, tl, md_sub_step_final);
     }
 
-    // Async Region: Any post-sync tasks.  Fixups, timestep & AMR tagging.
-    TaskRegion &async_region2 = tc.AddRegion(blocks.size());
-    for (int i = 0; i < blocks.size(); i++) {
-        auto &pmb = blocks[i];
-        auto &tl  = async_region2[i];
-        auto &mbd_sub_step_final = pmb->meshblock_data.Get(integrator->stage_name[stage]);
+    // Fix Region: prims/cons sync, floors, fixes, boundary conditions which need primitives
+    TaskRegion &fix_region = tc.AddRegion(num_partitions);
+    for (int i = 0; i < num_partitions; i++) {
+        auto &tl = fix_region[i];
+        auto &md_sub_step_final = pmesh->mesh_data.GetOrAdd(integrator->stage_name[stage], i);
 
         // If we're evolving the GRMHD variables explicitly, we need to fix UtoP variable inversion failures
         // Syncing bounds before calling this, and then running it over the whole domain, will make
         // behavior for different mesh breakdowns much more similar (identical?), since bad zones in
         // relevant ghost zone ranks will get to use all the same neighbors as if they were in the bulk
-        auto t_fix_p = tl.AddTask(t_none, Inverter::FixUtoP, mbd_sub_step_final.get());
+        auto t_fix_p = tl.AddTask(t_none, Inverter::MeshFixUtoP, md_sub_step_final.get());
 
-        auto t_set_bc = tl.AddTask(t_fix_p, parthenon::ApplyBoundaryConditions, mbd_sub_step_final);
+        auto t_set_bc = tl.AddTask(t_fix_p, parthenon::ApplyBoundaryConditionsOnCoarseOrFineMD, md_sub_step_final, false);
 
         // Make sure *all* conserved vars are synchronized at step end
-        auto t_ptou = tl.AddTask(t_set_bc, Flux::BlockPtoU, mbd_sub_step_final.get(), IndexDomain::entire, false);
+        auto t_ptou = tl.AddTask(t_set_bc, Flux::MeshPtoU, md_sub_step_final.get(), IndexDomain::entire, false);
 
         auto t_step_done = t_ptou;
 
         // Estimate next time step based on ctop
         if (stage == integrator->nstages) {
             auto t_new_dt =
-                tl.AddTask(t_step_done, Update::EstimateTimestep<MeshBlockData<Real>>, mbd_sub_step_final.get());
+                tl.AddTask(t_step_done, Update::EstimateTimestep<MeshData<Real>>, md_sub_step_final.get());
         }
     }
 

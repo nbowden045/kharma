@@ -1,5 +1,5 @@
 # SANE model emulating a real run for performance testing
-# Takes only 1k steps, dramatically reduced dump files
+# Takes only 1k steps, produces no dump files
 # Uses HARM driver harm_driver.cpp
 
 # (Also no archival parfile, B cleanup, or two-sync)
@@ -11,16 +11,14 @@ problem_id = torus
 # Pretty representative size for a long simulation
 # Larger simulations have smaller in-simulation timesteps
 <parthenon/mesh>
-refinement = none
-numlevel = 1
 nx1 = 256
-nx2 = 128
-nx3 = 128
+nx2 = 256
+nx3 = 256
 
 <parthenon/meshblock>
 nx1 = 128
-nx2 = 64
-nx3 = 64
+nx2 = 128
+nx3 = 128
 
 <coordinates>
 base = spherical_ks
@@ -35,11 +33,11 @@ nlim = 1000
 
 <GRMHD>
 cfl = 0.8
-gamma = 1.666667
+gamma = 1.333333
 reconstruction = weno5
 
 <driver>
-type = kharma
+type = imex
 two_sync = true
 
 <torus>
@@ -50,8 +48,12 @@ rmax = 12.0
 u_jitter = 0.04
 
 <b_field>
+solver = flux_ct
 type = sane
 beta_min = 100.
+
+<solver>
+type = onedw
 
 <floors>
 rho_min_geom = 1e-6

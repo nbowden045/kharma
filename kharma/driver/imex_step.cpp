@@ -1,25 +1,25 @@
-/* 
+/*
  *  File: imex_step.cpp
- *  
+ *
  *  BSD 3-Clause License
- *  
+ *
  *  Copyright (c) 2020, AFD Group at UIUC
  *  All rights reserved.
- *  
+ *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted provided that the following conditions are met:
- *  
+ *
  *  1. Redistributions of source code must retain the above copyright notice, this
  *     list of conditions and the following disclaimer.
- *  
+ *
  *  2. Redistributions in binary form must reproduce the above copyright notice,
  *     this list of conditions and the following disclaimer in the documentation
  *     and/or other materials provided with the distribution.
- *  
+ *
  *  3. Neither the name of the copyright holder nor the names of its
  *     contributors may be used to endorse or promote products derived from
  *     this software without specific prior written permission.
- *  
+ *
  *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  *  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  *  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -42,6 +42,7 @@
 #include "b_flux_ct.hpp"
 #include "electrons.hpp"
 #include "inverter.hpp"
+#include "ismr.hpp"
 #include "grmhd.hpp"
 #include "wind.hpp"
 // Other headers
@@ -88,8 +89,15 @@ TaskCollection KHARMADriver::MakeImExTaskCollection(BlockList_t &blocks, int sta
         // Preserve state for time derivatives if we need to output current
         if (use_jcon) {
             pmesh->mesh_data.Add("preserve");
-            // Above only copies on allocate -- ensure we copy every step
-            Copy<MeshData<Real>>({Metadata::Cell}, base.get(), pmesh->mesh_data.Get("preserve").get());
+            // Above only copies on allocate -- ensure we copy the MHD variables every step with a task
+            std::vector<MetadataFlag> vars_jcon_needs = {Metadata::GetUserFlag("MHD"), Metadata::GetUserFlag("Primitive")};
+            const int num_partitions = pmesh->DefaultNumPartitions();
+            TaskRegion &copy_region = tc.AddRegion(num_partitions);
+            for (int i = 0; i < num_partitions; i++) {
+                auto &tl = copy_region[i];
+                tl.AddTask(t_none, Copy<MeshData<Real>>, vars_jcon_needs,
+                            base.get(), pmesh->mesh_data.Get("preserve").get());
+            }
         }
         // FOFC needs to determine whether the "real" U-divF will violate floors, and needs a safe place to do it.
         // We populate it later, with each *sub-step*'s initial state
@@ -124,7 +132,7 @@ TaskCollection KHARMADriver::MakeImExTaskCollection(BlockList_t &blocks, int sta
     TaskRegion &flux_region = tc.AddRegion(num_partitions);
     for (int i = 0; i < num_partitions; i++) {
         auto &tl = flux_region[i];
-        // Container names: 
+        // Container names:
         // '_full_step_init' refers to the fluid state at the start of the full time step (Si in iharm3d)
         // '_sub_step_init' refers to the fluid state at the start of the sub step (Ss in iharm3d)
         // '_sub_step_final' refers to the fluid state at the end of the sub step (Sf in iharm3d)
@@ -146,7 +154,7 @@ TaskCollection KHARMADriver::MakeImExTaskCollection(BlockList_t &blocks, int sta
         auto t_start_recv_flux = t_start_recv_bound;
         if (pmesh->multilevel || use_b_ct)
             t_start_recv_flux = tl.AddTask(t_none, parthenon::StartReceiveFluxCorrections, md_sub_step_init);
-        
+
         // Calculate the flux of each variable through each face
         // This reconstructs the primitives (P) at faces and uses them to calculate fluxes
         // of the conserved variables (U) through each face.
@@ -162,7 +170,7 @@ TaskCollection KHARMADriver::MakeImExTaskCollection(BlockList_t &blocks, int sta
         // Any package modifications to the fluxes.  e.g.:
         // 1. CT calculations for B field transport
         // 2. Zero fluxes through poles
-        // etc 
+        // etc
         auto t_fix_flux = tl.AddTask(t_fluxes, Packages::FixFlux, md_sub_step_init.get());
 
         // If we're in AMR, correct fluxes from neighbors
@@ -221,6 +229,7 @@ TaskCollection KHARMADriver::MakeImExTaskCollection(BlockList_t &blocks, int sta
             auto t_copy_guess       = t_explicit;
             auto t_copy_emhd_vars   = t_explicit;
             if (use_ideal_guess) {
+                // This copies only q, dP for which we don't already have a guess
                 t_copy_emhd_vars = tl.AddTask(t_sources, Copy<MeshData<Real>>, std::vector<MetadataFlag>({Metadata::GetUserFlag("EMHDVar")}),
                                         md_sub_step_init.get(), md_solver.get());
                 t_copy_guess = t_copy_emhd_vars;
@@ -243,7 +252,7 @@ TaskCollection KHARMADriver::MakeImExTaskCollection(BlockList_t &blocks, int sta
             // Time-step implicit variables by root-finding the residual.
             // This calculates the primitive values after the substep for all "isImplicit" variables --
             // no need for separately adding the flux divergence or calling UtoP
-            auto t_implicit_step = tl.AddTask(t_copy_linesearch, Implicit::Step, md_full_step_init.get(), md_sub_step_init.get(), 
+            auto t_implicit_step = tl.AddTask(t_copy_linesearch, Implicit::Step, md_full_step_init.get(), md_sub_step_init.get(),
                                          md_flux_src.get(), md_linesearch.get(), md_solver.get(), integrator->beta[stage-1] * integrator->dt);
 
             // Copy the entire solver state (everything defined on the grid, incl. our new Face variables) into the final state md_sub_step_final
@@ -306,6 +315,12 @@ TaskCollection KHARMADriver::MakeImExTaskCollection(BlockList_t &blocks, int sta
         auto t_ptou = tl.AddTask(t_heat_electrons, Flux::MeshPtoU, md_sub_step_final.get(), IndexDomain::entire, false);
 
         auto t_step_done = t_ptou;
+        if (pkgs.count("ISMR")) {
+            auto t_derefine_b = t_ptou;
+            if (pkgs.count("B_CT"))
+                t_derefine_b = tl.AddTask(t_ptou, B_CT::DerefinePoles, md_sub_step_final.get());
+            t_step_done = tl.AddTask(t_derefine_b, ISMR::DerefinePoles, md_sub_step_final.get());
+        }
 
         // Estimate next time step based on ctop
         if (stage == integrator->nstages) {

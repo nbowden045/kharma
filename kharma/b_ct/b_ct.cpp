@@ -1,25 +1,25 @@
-/* 
+/*
  *  File: b_ct.cpp
- *  
+ *
  *  BSD 3-Clause License
- *  
+ *
  *  Copyright (c) 2020, AFD Group at UIUC
  *  All rights reserved.
- *  
+ *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted provided that the following conditions are met:
- *  
+ *
  *  1. Redistributions of source code must retain the above copyright notice, this
  *     list of conditions and the following disclaimer.
- *  
+ *
  *  2. Redistributions in binary form must reproduce the above copyright notice,
  *     this list of conditions and the following disclaimer in the documentation
  *     and/or other materials provided with the distribution.
- *  
+ *
  *  3. Neither the name of the copyright holder nor the names of its
  *     contributors may be used to endorse or promote products derived from
  *     this software without specific prior written permission.
- *  
+ *
  *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  *  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  *  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -52,13 +52,7 @@ std::shared_ptr<KHARMAPackage> B_CT::Initialize(ParameterInput *pin, std::shared
     auto pkg = std::make_shared<KHARMAPackage>("B_CT");
     Params &params = pkg->AllParams();
 
-    // Diagnostic & inadvisable flags
-
-    // KHARMA requires some kind of field transport if there is a magnetic field allocated.
-    // Use this flag if you actually want to disable all magnetic field flux corrections,
-    // and allow a field divergence to grow unchecked, usually for debugging or comparison reasons
-    bool disable_ct = pin->GetOrAddBoolean("b_field", "disable_ct", false);
-    params.Add("disable_ct", disable_ct);
+    // Diagnostic flags
 
     // Default to stopping execution when divB is large, which generally indicates something
     // has gone wrong.  As always, can be disabled by the brave.
@@ -67,13 +61,10 @@ std::shared_ptr<KHARMAPackage> B_CT::Initialize(ParameterInput *pin, std::shared
     Real kill_on_divb_over = pin->GetOrAddReal("b_field", "kill_on_divb_over", 1.e-3);
     params.Add("kill_on_divb_over", kill_on_divb_over);
 
-    // TODO gs05_alpha, LDZ04 UCT1, LDZ07 UCT2
+    // TODO gs05_alpha, LDZ04 UCT1, LDZ07 UCT2?
     std::vector<std::string> ct_scheme_options = {"bs99", "gs05_0", "gs05_c", "sg07"};
-    std::string ct_scheme = pin->GetOrAddString("b_field", "ct_scheme", "sg07", ct_scheme_options);
+    std::string ct_scheme = pin->GetOrAddString("b_field", "ct_scheme", "gs05_c", ct_scheme_options);
     params.Add("ct_scheme", ct_scheme);
-    if (ct_scheme == "gs05_c")
-        std::cout << "KHARMA WARNING: G&S '05 epsilon_c CT is not well-tested." << std::endl
-                  << "Use in GR at your own risk!" << std::endl;
 
     // Use the default Parthenon prolongation operator, rather than the divergence-preserving one
     // This relies entirely on the EMF communication for preserving the divergence
@@ -103,6 +94,13 @@ std::shared_ptr<KHARMAPackage> B_CT::Initialize(ParameterInput *pin, std::shared
                                             Metadata::GetUserFlag("MHD"), Metadata::GetUserFlag("Explicit"), Metadata::Vector};
     std::vector<MetadataFlag> flags_cons = {Metadata::Real, Metadata::Cell, Metadata::Derived, Metadata::Conserved, Metadata::WithFluxes,
                                             Metadata::GetUserFlag("MHD"), Metadata::GetUserFlag("Explicit"), Metadata::Vector};
+
+    // KHARMA now (vaguely) supports restarting from dump (.phdf) files.
+    // To do so we need to read cell-centered primitive B and interpolate to faces, as we do with iharm3d restart files
+    if (pin->GetOrAddBoolean("b_field", "restart_from_prims", false)) {
+        flags_prim.push_back(Metadata::Restart);
+    }
+
     std::vector<int> s_vector({NVEC});
     m = Metadata(flags_prim, s_vector);
     pkg->AddField("prims.B", m);
@@ -177,7 +175,17 @@ TaskStatus B_CT::BlockUtoP(MeshBlockData<Real> *rc, IndexDomain domain, bool coa
     // Return if we're not syncing U & P at all (e.g. edges)
     if (B_Uf.GetDim(4) == 0) return TaskStatus::complete;
 
-    const IndexRange3 bc = KDomain::GetRange(rc, domain, coarse);
+    // We need one cell inside of the domain, since it will be updated by the domain-face field
+    // this oversteps "interior" by a zone
+    IndexRange3 bct;
+    if (domain == IndexDomain::interior || domain == IndexDomain::entire) {
+        bct = KDomain::GetRange(rc, domain, coarse);
+    } else {
+        const BoundaryFace bface = KBoundaries::BoundaryFaceOf(domain);
+        const bool binner = KBoundaries::BoundaryIsInner(bface);
+        bct = KDomain::GetRange(rc, domain, (binner) ? 0 : -1, (binner) ? 1 : 0, coarse);
+    }
+    const IndexRange3 bc = bct;
 
     // Average the primitive vals to zone centers
     pmb->par_for("UtoP_B_center", bc.ks, bc.ke, bc.js, bc.je, bc.is, bc.ie,
@@ -366,45 +374,14 @@ TaskStatus B_CT::CalculateEMF(MeshData<Real> *md)
                               + emfc(bl, V3, k, j - 1, i) + emfc(bl, V3, k, j - 1, i - 1));
                 }
             );
-        } else if (scheme == "gs05_c") {
-            // Get primitive velocity at face (on right side) (TODO do we need some average?)
-            auto& uvecf = md->PackVariables(std::vector<std::string>{"Flux.vr"});
-
+        } else if (scheme == "gs05_c" || scheme == "sg07") {
+            auto& rho = md->PackVariablesAndFluxes(std::vector<std::string>{"cons.rho"});
             pmb0->par_for("B_CT_emf_GS05_c", block.s, block.e, b1.ks, b1.ke, b1.js, b1.je, b1.is, b1.ie,
                 KOKKOS_LAMBDA (const int &bl, const int &k, const int &j, const int &i) {
-                    const auto& G = B_U.GetCoords(bl);
-                    // "simple" flux + upwinding method, Stone & Gardiner '09 but also in Stone+08 etc.
-                    // Upwinded differences take in order (1-indexed):
-                    // 1. EMF component direction to calculate
-                    // 2. Direction of derivative
-                    // 3. Direction of upwinding
-                    // ...then zone number...
-                    // and finally, a boolean indicating a leftward (e.g., i-3/4) vs rightward (i-1/4) position
+                    // Following adapted closely from AthenaK, including clever use of the mass flux for the
+                    // sign of the contact mode.
                     if (ndim > 2) {
-                        emf_pack(bl, E1, 0, k, j, i) +=
-                              0.125*(upwind_diff(B_U(bl), emfc(bl), uvecf(bl), 1, 3, 2, k, j, i, false)
-                                   - upwind_diff(B_U(bl), emfc(bl), uvecf(bl), 1, 3, 2, k, j, i, true))
-                            + 0.125*(upwind_diff(B_U(bl), emfc(bl), uvecf(bl), 1, 2, 3, k, j, i, false)
-                                   - upwind_diff(B_U(bl), emfc(bl), uvecf(bl), 1, 2, 3, k, j, i, true));
-                        emf_pack(bl, E2, 0, k, j, i) +=
-                              0.125*(upwind_diff(B_U(bl), emfc(bl), uvecf(bl), 2, 1, 3, k, j, i, false)
-                                   - upwind_diff(B_U(bl), emfc(bl), uvecf(bl), 2, 1, 3, k, j, i, true))
-                            + 0.125*(upwind_diff(B_U(bl), emfc(bl), uvecf(bl), 2, 3, 1, k, j, i, false)
-                                   - upwind_diff(B_U(bl), emfc(bl), uvecf(bl), 2, 3, 1, k, j, i, true));
-                    }
-                    emf_pack(bl, E3, 0, k, j, i) +=
-                          0.125*(upwind_diff(B_U(bl), emfc(bl), uvecf(bl), 3, 2, 1, k, j, i, false)
-                               - upwind_diff(B_U(bl), emfc(bl), uvecf(bl), 3, 2, 1, k, j, i, true))
-                        + 0.125*(upwind_diff(B_U(bl), emfc(bl), uvecf(bl), 3, 1, 2, k, j, i, false)
-                               - upwind_diff(B_U(bl), emfc(bl), uvecf(bl), 3, 1, 2, k, j, i, true));
-                }
-            );
-        } else if (scheme == "sg07") {
-            auto& rho = md->PackVariablesAndFluxes(std::vector<std::string>{"cons.rho"});
-            pmb0->par_for("B_CT_emf_SG07", block.s, block.e, b1.ks, b1.ke, b1.js, b1.je, b1.is, b1.ie,
-                KOKKOS_LAMBDA (const int &bl, const int &k, const int &j, const int &i) {
-                    if (ndim > 2) {
-                        // integrate E1 to corner using SG07
+                        // Integrate EMF to the corner using GS07 i.e. GS05 E^c upwinding
                         Real e1_l3 = (rho(bl).flux(X2DIR, 0, k-1, j, i) >= 0.0) ?
                                     B_U(bl).flux(X3DIR, V2, k, j-1, i) - emfc(bl, V1, k-1, j-1, i) :
                                     B_U(bl).flux(X3DIR, V2, k, j  , i) - emfc(bl, V1, k-1, j  , i);
@@ -419,7 +396,6 @@ TaskStatus B_CT::CalculateEMF(MeshData<Real> *md)
                                     -B_U(bl).flux(X2DIR, V3, k  , j, i) - emfc(bl, V1, k  , j  , i);
                         emf_pack(bl, E1, 0, k, j, i) += 0.25*(e1_l3 + e1_r3 + e1_l2 + e1_r2);
 
-                        // integrate E2 to corner using SG07
                         Real e2_l3 = (rho(bl).flux(X1DIR, 0, k-1, j, i) >= 0.0) ?
                                     -B_U(bl).flux(X3DIR, V1, k, j, i-1) - emfc(bl, V2, k-1, j, i-1) :
                                     -B_U(bl).flux(X3DIR, V1, k, j, i  ) - emfc(bl, V2, k-1, j, i  );
@@ -435,7 +411,6 @@ TaskStatus B_CT::CalculateEMF(MeshData<Real> *md)
                         emf_pack(bl, E2, 0, k, j, i) += 0.25*(e2_l3 + e2_r3 + e2_l1 + e2_r1);
                     }
 
-                    // integrate E3 to corner using SG07
                     Real e3_l2 = (rho(bl).flux(X1DIR, 0, k, j-1, i) >= 0.0) ?
                                 B_U(bl).flux(X2DIR, V1, k, j, i-1) - emfc(bl, V3, k, j-1, i-1) :
                                 B_U(bl).flux(X2DIR, V1, k, j, i  ) - emfc(bl, V3, k, j-1, i  );
@@ -508,6 +483,174 @@ TaskStatus B_CT::AddSource(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDomai
         }
     );
 
+    return TaskStatus::complete;
+}
+
+TaskStatus B_CT::DerefinePoles(MeshData<Real> *md)
+{
+    // HYERIN (01/17/24) this routine is not general yet and only applies to polar boundaries for now.
+    auto pmesh = md->GetMeshPointer();
+    const uint nlevels = pmesh->packages.Get("ISMR")->Param<uint>("nlevels");
+
+    // Figure out indices
+    int ng = Globals::nghost;
+    for (int iblock=0; iblock < md->NumBlocks(); iblock++) {
+        auto& rc = md->GetBlockData(iblock);
+        auto pmb = rc->GetBlockPointer();
+        const auto& G = pmb->coords;
+        auto B_Uf = rc->PackVariables(std::vector<std::string>{"cons.fB"});
+        auto B_avg = rc->PackVariables(std::vector<std::string>{"ismr.fB_avg"});
+        for (int i = 0; i < BOUNDARY_NFACES; i++) {
+            BoundaryFace bface = (BoundaryFace) i;
+            auto bname = KBoundaries::BoundaryName(bface);
+            auto bdir = KBoundaries::BoundaryDirection(bface);
+            auto domain = KBoundaries::BoundaryDomain(bface);
+            auto binner = KBoundaries::BoundaryIsInner(bface);
+            if (bdir == X2DIR && pmb->boundary_flag[bface] == BoundaryFlag::user) {
+                // indices
+                // TODO also get ranges in cells from the beginning rather than using j_p & calculating j_c
+                IndexRange3 bCC = KDomain::GetRange(rc, IndexDomain::interior, CC);
+                // Note these are invalid in X2! We use them only for X1/X3 directions
+                IndexRange3 bF1 = KDomain::GetRange(rc, domain, F1, ng, -ng);
+                IndexRange3 bF3 = KDomain::GetRange(rc, domain, F3, ng, -ng);
+                const int j_f = (binner) ? bCC.js : bCC.je + 1; // last physical face
+                const int jps = (binner) ? j_f + (nlevels - 1) : j_f - (nlevels - 1); // start of the lowest level of derefinement
+                const IndexRange j_p = IndexRange{(binner) ? j_f : jps, (binner) ? jps : j_f};  // Range of x2 to be de-refined
+                const int offset = (binner) ? 1 : -1; // offset to read the physical face values
+                const int point_out = offset; // if F2 B field at j_f + offset face is positive when pointing out of the cell, +1.
+
+                // F1 average
+                pmb->par_for("B_CT_derefine_poles_avg_F1", bCC.ks, bCC.ke, j_p.s, j_p.e, bF1.is, bF1.ie,
+                    KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
+                        const int coarse_cell_len = m::pow(2, ((binner) ? jps - j : j - jps) + 1);
+                        const int j_c = j + ((binner) ? 0 : -1); // cell center
+                        const int k_fine = (k - ng) % coarse_cell_len; // this fine cell's k-index within the coarse cell
+                        const int k_start = k - k_fine; // starting k-index of the coarse cell
+
+                        // average over fine cells within the coarse cell we're in
+                        Real avg = 0.;
+                        for (int ktemp = 0; ktemp < coarse_cell_len; ++ktemp)
+                            avg += B_Uf(F1, 0, k_start + ktemp, j_c, i) * G.Volume<F1>(k_start + ktemp, j_c, i);
+                        avg /= coarse_cell_len;
+
+                        B_avg(F1, 0, k, j_c, i) = avg;
+                    }
+                );
+                // F2 average
+                pmb->par_for("B_CT_derefine_poles_avg_F2", bCC.ks, bCC.ke, j_p.s, j_p.e, bCC.is, bCC.ie,
+                    KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
+                        const int coarse_cell_len = m::pow(2, ((binner) ? jps - j : j - jps) + 1);
+                        // fine cell's k index within the coarse cell
+                        const int k_fine = (k - ng) % coarse_cell_len;
+                        // starting k-index of the coarse cell
+                        const int k_start = k - k_fine;
+
+                        if (j == j_f) {
+                            // The fine cells have 0 fluxes through the physical-ghost boundaries.
+                            B_avg(F2, 0, k, j, i) = 0.;
+                        } else { // average the fine cells
+                            Real avg = 0.;
+                            for (int ktemp = 0; ktemp < coarse_cell_len; ++ktemp)
+                                avg += B_Uf(F2, 0, k_start + ktemp, j, i) * G.Volume<F2>(k_start + ktemp, j, i);
+                            avg /= coarse_cell_len;
+
+                            B_avg(F2, 0, k, j, i) = avg;
+                        }
+                    }
+                );
+                // F3 average
+                pmb->par_for("B_CT_derefine_poles_avg_F3", bF3.ks, bF3.ke, j_p.s, j_p.e, bCC.is, bCC.ie,
+                    KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
+                        // the current level of derefinement at given j
+                        const int current_lv = ((binner) ? jps - j : j - jps);
+                        // half of the coarse cell's length
+                        const int c_half = m::pow(2, current_lv);
+                        const int coarse_cell_len = 2 * c_half;
+                        // cell center
+                        const int j_c = j + ((binner) ? 0 : -1);
+                        // this fine cell's k-index within the coarse cell
+                        const int k_fine = (k - ng) % coarse_cell_len;
+                        // starting k-index of the coarse cell
+                        const int k_start = k - k_fine;
+                        const int k_half = k_start + c_half;
+                        // end k-index of the coarse cell
+                        const int k_end  = k_start + coarse_cell_len;
+
+                        if ((k - ng) % coarse_cell_len == 0) {
+                            // Don't modify faces of the coarse cells
+                            B_avg(F3, 0, k, j_c, i) = B_Uf(F3, 0, k, j_c, i) * G.Volume<F3>(k, j_c, i);
+                        } else {
+                            // F3: The internal faces will take care of the divB=0. The two faces of the coarse cell will remain unchanged.
+                            // First calculate the very central internal face. In other words, deal with the highest level internal face first.
+                            // Sum of F2 fluxes in the left and right half of the coarse cell each.
+                            Real c_left_v = 0., c_right_v = 0.;
+                            for (int ktemp = 0; ktemp < c_half; ++ktemp) {
+                                c_left_v  += B_Uf(F2, 0, k_half - 1 - ktemp, j + offset, i) * G.Volume<F2>(k_half - 1 - ktemp, j + offset, i);
+                                c_right_v += B_Uf(F2, 0, k_half   + ktemp, j + offset, i) * G.Volume<F2>(k_half     + ktemp, j + offset, i);
+                            }
+                            const Real B_start = B_Uf(F3, 0, k_start, j_c, i) * G.Volume<F3>(k_start, j_c, i);
+                            const Real B_end   = B_Uf(F3, 0, k_end,   j_c, i) * G.Volume<F3>(k_end,   j_c, i);
+                            const Real B_center = (B_start + B_end + point_out * (c_right_v - c_left_v)) / 2.;
+
+                            if (k == k_half) { // if at the center, then store the calculated value.
+                                B_avg(F3, 0, k, j_c, i) = B_center;
+                            } else if (k < k_half) { // interpolate between B_start and B_center
+                                B_avg(F3, 0, k, j_c, i) = ((c_half - k_fine) * B_start + k_fine * B_center) / (c_half);
+                            } else if (k > k_half) { // interpolate between B_end and B_center
+                                B_avg(F3, 0, k, j_c, i) = ((k_fine - c_half) * B_end + (coarse_cell_len - k_fine) * B_center) / (c_half);
+                            }
+                        }
+                    }
+                );
+
+                // F1 write
+                pmb->par_for("B_CT_derefine_poles_F1", bCC.ks, bCC.ke, j_p.s, j_p.e, bF1.is, bF1.ie,
+                    KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
+                        int j_c = j + ((binner) ? 0 : -1); // cell center
+                        B_Uf(F1, 0, k, j_c, i) = B_avg(F1, 0, k, j_c, i) / G.Volume<F1>(k, j_c, i);
+                    }
+                );
+                // F2 write
+                pmb->par_for("B_CT_derefine_poles_F2", bCC.ks, bCC.ke, j_p.s, j_p.e, bCC.is, bCC.ie,
+                    KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
+                        B_Uf(F2, 0, k, j, i) = B_avg(F2, 0, k, j, i) / G.Volume<F2>(k, j, i);
+                    }
+                );
+                // F3 write
+                pmb->par_for("B_CT_derefine_poles_F3", bF3.ks, bF3.ke, j_p.s, j_p.e, bCC.is, bCC.ie,
+                    KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
+                        int j_c = j + ((binner) ? 0 : -1); // cell center
+                        B_Uf(F3, 0, k, j_c, i) = B_avg(F3, 0, k, j_c, i) / G.Volume<F3>(k, j_c, i);
+                    }
+                );
+
+                // Average the primitive vals to zone centers
+                const int ndim = rc->GetMeshPointer()->ndim;
+                auto B_U = rc->PackVariables(std::vector<std::string>{"cons.B"});
+                auto B_P = rc->PackVariables(std::vector<std::string>{"prims.B"});
+                pmb->par_for("UtoP_B_center", bCC.ks, bCC.ke, j_p.s, j_p.e, bCC.is, bCC.ie,
+                    KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
+                        int j_c = j + ((binner) ? 0 : -1); // cell center
+                        B_P(V1, k, j_c, i) = (B_Uf(F1, 0, k, j_c, i) / G.gdet(Loci::face1, j_c, i)
+                                        + B_Uf(F1, 0, k, j_c, i + 1) / G.gdet(Loci::face1, j_c, i + 1)) / 2;
+                        B_P(V2, k, j_c, i) = (ndim > 1) ? (B_Uf(F2, 0, k, j_c, i) / G.gdet(Loci::face2, j_c, i)
+                                                    + B_Uf(F2, 0, k, j_c + 1, i) / G.gdet(Loci::face2, j_c + 1, i)) / 2
+                                                    : B_Uf(F2, 0, k, j_c, i) / G.gdet(Loci::face2, j_c, i);
+                        B_P(V3, k, j_c, i) = (ndim > 2) ? (B_Uf(F3, 0, k, j_c, i) / G.gdet(Loci::face3, j_c, i)
+                                                    + B_Uf(F3, 0, k + 1, j_c, i) / G.gdet(Loci::face3, j_c, i)) / 2
+                                                    : B_Uf(F3, 0, k, j_c, i) / G.gdet(Loci::face3, j_c, i);
+                    }
+                );
+                // Recover conserved B at centers
+                pmb->par_for("UtoP_B_centerPtoU", 0, NVEC-1, bCC.ks, bCC.ke, j_p.s, j_p.e, bCC.is, bCC.ie,
+                    KOKKOS_LAMBDA (const int &v, const int &k, const int &j, const int &i) {
+                        int j_c = j + ((binner) ? 0 : -1); // cell center
+                        B_U(v, k, j_c, i) = B_P(v, k, j_c, i) * G.gdet(Loci::center, j_c, i);
+                    }
+                );
+            }
+        }
+    }
     return TaskStatus::complete;
 }
 
@@ -624,7 +767,8 @@ void B_CT::CalcDivB(MeshData<Real> *md, std::string divb_field_name)
 
 void B_CT::FillOutput(MeshBlock *pmb, ParameterInput *pin)
 {
-    auto rc = pmb->meshblock_data.Get();
+    // This is called after the step, use "base" container
+    auto rc = pmb->meshblock_data.Get("base");
     const int ndim = pmb->pmy_mesh->ndim;
     if (ndim < 2) return;
 
