@@ -320,7 +320,7 @@ KOKKOS_INLINE_FUNCTION int u_to_p<Type::kastaun>(const GRCoordinates& G, const V
         if (f*fp < 0.0) {
             zm = zp;
             fm = fp;
-            zp = z; 
+            zp = z;
             fp = f;
         } else {  // assign zp-->z if root bracketed by [zm,z]
             fm = 0.5*fm; // 1/2 comes from "Illinois algorithm" to accelerate convergence

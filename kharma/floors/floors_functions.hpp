@@ -270,7 +270,8 @@ KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::normal_onedw>(FLOOR_ONE_
     // reducing the Lorentz factor)
     const Real rho_add    = m::max(0., rhoflr_max - P(m_p.RHO, k, j, i));
     const Real u_add      = m::max(0., uflr_max - P(m_p.UU, k, j, i));
-    const Real uvec[NVEC] = {P(m_p.U1, k, j, i), P(m_p.U2, k, j, i), P(m_p.U3, k, j, i)};
+    //const Real uvec[NVEC] = {P(m_p.U1, k, j, i), P(m_p.U2, k, j, i), P(m_p.U3, k, j, i)};
+    const Real uvec[NVEC] = {0.};
     const Real B[NVEC] = {0.};
 
     // 2. Calculate the increase in conserved mass/energy corresponding to the new material.
