@@ -73,6 +73,10 @@ std::shared_ptr<KHARMAPackage> B_CT::Initialize(ParameterInput *pin, std::shared
     if (lazy_prolongation && pin->GetString("parthenon/mesh", "refinement") == "adaptive")
         throw std::runtime_error("Cannot use non-divergence-preserving prolongation in AMR!");
 
+    // TODO don't set this unless we're reconnecting at boundaries (can't just check, we load Boundaries pkg later)
+    int reconnection_outer_buffer = pin->GetOrAddInteger("b_field", "reconnection_outer_buffer", 5);
+    params.Add("reconnection_outer_buffer", reconnection_outer_buffer);
+
     // FIELDS
 
     // Flags for B fields on faces.

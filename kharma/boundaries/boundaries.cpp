@@ -67,19 +67,13 @@ std::shared_ptr<KHARMAPackage> KBoundaries::Initialize(ParameterInput *pin, std:
     // Option to excise a bit at the poles when calculating fluxes
     bool excise_polar_flux = pin->GetOrAddBoolean("boundaries", "excise_polar_flux", false);
     params.Add("excise_polar_flux", excise_polar_flux);
-    if (excise_polar_flux) {
-        // These options are opposites
-        pin->SetBoolean("boundaries", "zero_polar_flux", false);
-        // TODO check whether the user explicitly set these false and yell instead of silent override
-        pin->SetBoolean("boundaries", "reconnect_B3_inner_x2", true);
-        pin->SetBoolean("boundaries", "reconnect_B3_outer_x2", true);
-        // These are themselves unstable, and don't help the wake much
-        //pin->SetBoolean("boundaries", "cancel_T3_inner_x2", true);
-        //pin->SetBoolean("boundaries", "cancel_T3_outer_x2", true);
-    }
     // Otherwise, those fluxes should be zero
-    bool zero_polar_flux = pin->GetOrAddBoolean("boundaries", "zero_polar_flux", spherical);
+    bool zero_polar_flux = pin->GetOrAddBoolean("boundaries", "zero_polar_flux", spherical && !excise_polar_flux);
     params.Add("zero_polar_flux", zero_polar_flux);
+    // Throw an error if both are set
+    if (excise_polar_flux && zero_polar_flux) {
+        throw std::runtime_error("Cannot set both boundaries/excise_polar_flux and boundaries/zero_polar_flux!");
+    }
 
     // Apply physical boundaries to conserved GRMHD variables rho u^r, T^mu_nu
     // Probably inadvisable?
@@ -199,7 +193,8 @@ std::shared_ptr<KHARMAPackage> KBoundaries::Initialize(ParameterInput *pin, std:
             bool clean_face_B = pin->GetOrAddBoolean("boundaries", "clean_face_B_" + bname, (btype == "outflow"));
             params.Add("clean_face_B_"+bname, clean_face_B);
             // Forcibly reconnect field loops that get trapped around the polar boundary
-            bool reconnect_B3 = pin->GetOrAddBoolean("boundaries", "reconnect_B3_" + bname, false);
+            // Needed to keep excised-flux transmitting boundaries stable
+            bool reconnect_B3 = pin->GetOrAddBoolean("boundaries", "reconnect_B3_" + bname, excise_flux);
             params.Add("reconnect_B3_"+bname, reconnect_B3);
 
             // Special EMF averaging.  Allows B3 to "slip" around the pole

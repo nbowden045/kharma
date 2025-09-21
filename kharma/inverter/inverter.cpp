@@ -203,6 +203,24 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                 if (normal_frame_floors) {
                     fflagl |= Floors::determine_floors(G, P, m_p, gam, k, j, i, inverter_floors, inverter_floors_inner,
                         rhoflr_max, uflr_max);
+                    // Add a floor to density which controls wayward velocities
+                    if (inverter_floors.use_rho_to_slow) {
+                        // Calculate necessary rho
+                        const Real rho = std::max(P(m_p.RHO, k, j, i), rhoflr_max);
+                        const Real u = std::max(P(m_p.UU, k, j, i), uflr_max);
+                        const Real rhoh = rho + (gam + 1) * u;
+                        const Real S = m::sqrt(U(m_u.U1, k, j, i) * U(m_u.U1, k, j, i) +
+                                               U(m_u.U2, k, j, i) * U(m_u.U2, k, j, i) +
+                                               U(m_u.U3, k, j, i) * U(m_u.U3, k, j, i));
+                        const Real gamma = GRMHD::lorentz_calc(G, P, m_p, k, j, i, Loci::center);
+                        const Real rhoh_min = S / gamma * gamma * m::sqrt(1 - 1 / (gamma * gamma));
+                        if (rhoh < rhoh_min) {
+                            rhoflr_max = rho * rhoh_min/rhoh;
+                            uflr_max = u * rhoh_min/rhoh;
+                        }
+                    } // TODO try adding at different temperatures/only density or energy
+                    // TODO after adding here, we can use a much simpler solve:
+                    // Spar^2/(rhoh^2 W^4) + Sperp^2/(rhoh W^2 + B^2)^2 + 1/W^2 - 1 = 0
                 } else {
                     // Bare minimum floors for numerics, before applying the rest in user-selected frame
                     rhoflr_max = inverter_floors.rho_min_const;
