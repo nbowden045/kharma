@@ -186,6 +186,10 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
 
     const auto& G = pmb->coords;
 
+    // No floors/floors_inner distinction, TODO?
+    const Real rhoh_denom_max = SQR(inverter_floors.gamma_max) *
+                                m::sqrt(1 - 1 / SQR(inverter_floors.gamma_max));
+
     // Get the primitives from our conserved versions
     // Notice by default, we recover variables for only the physical (interior or interior-ghost)
     // zones!  These are the only ones which are filled at our point in the step
@@ -199,40 +203,114 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
             // Apply floors immediately, attempting to correct bad inversions
             if (apply_floors_with_inversion) {
                 Real rhoflr_max, uflr_max;
-                int fflagl = 0; // Could read fflag here to preserve prior floors but there better not be any
+                int fflagl = 0; // There are no prior floors, reset
                 if (normal_frame_floors) {
                     fflagl |= Floors::determine_floors(G, P, m_p, gam, k, j, i, inverter_floors, inverter_floors_inner,
                         rhoflr_max, uflr_max);
-                    // Add a floor to density which controls wayward velocities
-                    if (inverter_floors.use_rho_to_slow) {
-                        // Calculate necessary rho
-                        const Real rho = std::max(P(m_p.RHO, k, j, i), rhoflr_max);
-                        const Real u = std::max(P(m_p.UU, k, j, i), uflr_max);
-                        const Real rhoh = rho + (gam + 1) * u;
-                        const Real S = m::sqrt(U(m_u.U1, k, j, i) * U(m_u.U1, k, j, i) +
-                                               U(m_u.U2, k, j, i) * U(m_u.U2, k, j, i) +
-                                               U(m_u.U3, k, j, i) * U(m_u.U3, k, j, i));
-                        const Real gamma = GRMHD::lorentz_calc(G, P, m_p, k, j, i, Loci::center);
-                        const Real rhoh_min = S / gamma * gamma * m::sqrt(1 - 1 / (gamma * gamma));
-                        if (rhoh < rhoh_min) {
-                            rhoflr_max = rho * rhoh_min/rhoh;
-                            uflr_max = u * rhoh_min/rhoh;
-                        }
-                    } // TODO try adding at different temperatures/only density or energy
-                    // TODO after adding here, we can use a much simpler solve:
-                    // Spar^2/(rhoh^2 W^4) + Sperp^2/(rhoh W^2 + B^2)^2 + 1/W^2 - 1 = 0
                 } else {
-                    // Bare minimum floors for numerics, before applying the rest in user-selected frame
+                    // Bare minimum floors for numerics, then we apply the rest in user-selected frame
                     rhoflr_max = inverter_floors.rho_min_const;
                     uflr_max = inverter_floors.u_min_const;
                     if (P(m_p.RHO, k, j, i) < rhoflr_max) fflagl |= Floors::FFlag::GEOM_RHO;
                     if (P(m_p.UU, k, j, i) < uflr_max) fflagl |= Floors::FFlag::GEOM_U;
                 }
                 if (fflagl) {
-                    // Apply floors to P -- this calls inversion again
-                    pflagl = Floors::apply_floors<Floors::InjectionFrame::normal_kastaun>(G, P, m_p, gam, k, j, i,
-                            rhoflr_max, uflr_max, U, m_u);
-                    apply_ceilings(G, P, m_p, gam, k, j, i, inverter_floors, inverter_floors_inner, U, m_u);
+                    // Add a floor to density which controls wayward velocities
+                    if (inverter_floors.use_rho_to_slow) {
+                        // Apply any previous floors to see if we need to add
+                        Real rho = std::max(P(m_p.RHO, k, j, i), rhoflr_max);
+                        Real u = std::max(P(m_p.UU, k, j, i), uflr_max);
+                        Real rhoh = rho + (gam + 1) * u;
+
+                        const Real Scov[GR_DIM] = {U(m_u.UU, k, j, i),
+                                                    U(m_u.U1, k, j, i),
+                                                    U(m_u.U2, k, j, i),
+                                                    U(m_u.U3, k, j, i)};
+                        Real Scon[GR_DIM];
+                        G.raise(Scov, Scon, k, j, i, Loci::center);
+                        const Real S = m::sqrt(dot(Scon, Scov));
+                        const Real rhoh_min = S / rhoh_denom_max;
+                        if (rhoh < rhoh_min) {
+                            // Add proportionally to rho & u, preserving temperature
+                            P(m_p.RHO, k, j, i) = rhoflr_max = rho * rhoh_min/rhoh;
+                            P(m_p.UU, k, j, i) = uflr_max = u * rhoh_min/rhoh;
+                            rhoh = rhoh_min;
+
+                            // *Normal observer* magnetic field (not 4vectors below)
+                            Real Bcon[GR_DIM] = {0}, Bcov[GR_DIM] = {0};
+                            if (m_p.B1 >= 0) {
+                                Bcon[0] = 0;
+                                Bcon[1] = P(m_p.B1, k, j, i);
+                                Bcon[2] = P(m_p.B2, k, j, i);
+                                Bcon[3] = P(m_p.B3, k, j, i);
+                                G.lower(Bcon, Bcov, k, j, i, Loci::center);
+                            }
+                            const Real Bsq   = m::max(dot(Bcon, Bcov), SMALL);
+                            const Real B_mag = m::sqrt(Bsq);
+
+                            // Break up S, perpendicular part will have extra momentum from B
+                            const Real Spar_mag = m::min(dot(Bcon, Scov) / B_mag, S);
+                            const Real Sparcon[GR_DIM] = {Bcon[0] / B_mag * Spar_mag,
+                                                        Bcon[1] / B_mag * Spar_mag,
+                                                        Bcon[2] / B_mag * Spar_mag,
+                                                        Bcon[2] / B_mag * Spar_mag};
+
+                            const Real Sperpcon[GR_DIM] = {Scon[0] - Sparcon[0],
+                                                       Scon[1] - Sparcon[1],
+                                                       Scon[2] - Sparcon[2],
+                                                       Scon[3] - Sparcon[3]};
+                            Real Sperpcov[GR_DIM];
+                            G.lower(Sperpcon, Sperpcov, k, j, i, Loci::center);
+                            const Real Sperp2 = dot(Sperpcon, Sperpcov);
+                            
+                            // Equation for Lorentz factor W
+                            auto f = [&] (Real W) {
+                                const Real rhohW2 = rhoh*W*W;
+                                return Spar_mag*Spar_mag / SQR(rhohW2)
+                                        + Sperp2 / SQR(rhohW2 + Bsq)
+                                        + 1/(W*W) - 1.;
+                            };
+
+                            // Rootfind.  This is guaranteed mathematically to have a solution,
+                            // but track anyway because IEEE is spicy
+                            bool vel_solve_failed = false;
+                            Real W = inverter_floors.gamma_max / 2.;
+                            Real Wm = 1., Wp = inverter_floors.gamma_max;
+                            if (f(Wm) * f(Wp) > 0.) {
+                                vel_solve_failed = true;
+                            } else {
+                                while (1) {
+                                    Real Wc = (Wm + Wp) / 2.;
+                                    Real resv = m::abs(f(Wc));
+                                    if (resv < 1e-8 || m::abs((Wp - Wm) / 2) < 1e-10) {
+                                        W = Wc;
+                                        vel_solve_failed = (resv > 1e-8);
+                                        break;
+                                    }
+                                    // Same sign as left side -> center now left side
+                                    if (f(Wc) * f(Wm) > 0.)
+                                        Wm = Wc;
+                                    else
+                                        Wp = Wc;
+                                }
+                            }
+
+                            if (!vel_solve_failed) {
+                                VLOOP P(m_p.U1 + v, k, j, i) = W * (
+                                                    Sparcon[1 + v]  / (rhoh * W * W) +
+                                                    Sperpcon[1 + v] / (rhoh * W * W + Bsq));
+                                pflagl = static_cast<int>(Inverter::Status::success);
+                            } else {
+                                // This should basically NEVER happen
+                                pflagl = static_cast<int>(Inverter::Status::bad_velocity);
+                            }
+                        }
+                    } else {
+                        // Apply floors to P -- this calls inversion again
+                        pflagl = Floors::apply_floors<Floors::InjectionFrame::normal_kastaun>(G, P, m_p, gam, k, j, i,
+                                rhoflr_max, uflr_max, U, m_u);
+                        apply_ceilings(G, P, m_p, gam, k, j, i, inverter_floors, inverter_floors_inner, U, m_u);
+                    }
                 }
 
                 // If we recovered the velocity, mark we used the gamma ceiling
