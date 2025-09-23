@@ -200,7 +200,8 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
             int pflagl = Inverter::u_to_p<inverter>(G, U, m_u, gam, k, j, i, P, m_p, Loci::center,
                                                     iter_max, err_tol, false);
 
-            // Apply floors immediately, attempting to correct bad inversions
+            // Apply floors immediately, attempting to correct bad values
+            // from either failed or "successful" inversions
             if (apply_floors_with_inversion) {
                 Real rhoflr_max, uflr_max;
                 int fflagl = 0; // There are no prior floors, reset
@@ -217,91 +218,96 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                 if (fflagl) {
                     // Add a floor to density which controls wayward velocities
                     if (inverter_floors.use_rho_to_slow) {
-                        // Apply any previous floors to see if we need to add
-                        Real rho = std::max(P(m_p.RHO, k, j, i), rhoflr_max);
-                        Real u = std::max(P(m_p.UU, k, j, i), uflr_max);
-                        Real rhoh = rho + (gam + 1) * u;
+                        // Calculate necessary rho
+                        const Real rho = std::max(P(m_p.RHO, k, j, i), rhoflr_max);
+                        const Real u = std::max(P(m_p.UU, k, j, i), uflr_max);
+                        const Real rhoh = rho + gam * u;
+                        const Real alpha  = 1. / m::sqrt(-G.gcon(Loci::center, j, i, 0, 0));
+                        const Real a_over_g = alpha / G.gdet(Loci::center, j, i);
+                        Real Scov[3] = {U(m_u.U1, k, j, i) * a_over_g,
+                                        U(m_u.U2, k, j, i) * a_over_g,
+                                        U(m_u.U3, k, j, i) * a_over_g};
+                        Real Scon[3];
+                        Real gupper[GR_DIM][GR_DIM], glower[GR_DIM][GR_DIM];
+                        G.gcon(Loci::center, j, i, gupper);
+                        G.gcov(Loci::center, j, i, glower);
+                        Scon[0] = ((gupper[1][1] - gupper[0][1]*gupper[0][1]/gupper[0][0])*Scov[0] +
+                                    (gupper[1][2] - gupper[0][1]*gupper[0][2]/gupper[0][0])*Scov[1] +
+                                    (gupper[1][3] - gupper[0][1]*gupper[0][3]/gupper[0][0])*Scov[2]);
 
-                        const Real Scov[GR_DIM] = {U(m_u.UU, k, j, i),
-                                                    U(m_u.U1, k, j, i),
-                                                    U(m_u.U2, k, j, i),
-                                                    U(m_u.U3, k, j, i)};
-                        Real Scon[GR_DIM];
-                        G.raise(Scov, Scon, k, j, i, Loci::center);
-                        const Real S = m::sqrt(dot(Scon, Scov));
-                        const Real rhoh_min = S / rhoh_denom_max;
+                        Scon[1] = ((gupper[2][1] - gupper[0][2]*gupper[0][1]/gupper[0][0])*Scov[0] +
+                                    (gupper[2][2] - gupper[0][2]*gupper[0][2]/gupper[0][0])*Scov[1] +
+                                    (gupper[2][3] - gupper[0][2]*gupper[0][3]/gupper[0][0])*Scov[2]);
+
+                        Scon[2] = ((gupper[3][1] - gupper[0][3]*gupper[0][1]/gupper[0][0])*Scov[0] +
+                                    (gupper[3][2] - gupper[0][3]*gupper[0][2]/gupper[0][0])*Scov[1] +
+                                    (gupper[3][3] - gupper[0][3]*gupper[0][3]/gupper[0][0])*Scov[2]);
+                        Real Ssq = 0.0;
+                        SPACELOOP(ii) Ssq += Scon[ii] * Scov[ii];
+
+                        const Real rhoh_min = m::sqrt(Ssq) / rhoh_denom_max;
                         if (rhoh < rhoh_min) {
-                            // Add proportionally to rho & u, preserving temperature
-                            P(m_p.RHO, k, j, i) = rhoflr_max = rho * rhoh_min/rhoh;
-                            P(m_p.UU, k, j, i) = uflr_max = u * rhoh_min/rhoh;
-                            rhoh = rhoh_min;
+                            fflagl |= Floors::FFlag::INVERTER_GAMMA;
+                            P(m_p.RHO, k, j, i) = rho * rhoh_min/rhoh;
+                            P(m_p.UU, k, j, i) = u * rhoh_min/rhoh;
 
-                            // *Normal observer* magnetic field (not 4vectors below)
-                            Real Bcon[GR_DIM] = {0}, Bcov[GR_DIM] = {0};
-                            if (m_p.B1 >= 0) {
-                                Bcon[0] = 0;
-                                Bcon[1] = P(m_p.B1, k, j, i);
-                                Bcon[2] = P(m_p.B2, k, j, i);
-                                Bcon[3] = P(m_p.B3, k, j, i);
-                                G.lower(Bcon, Bcov, k, j, i, Loci::center);
-                            }
-                            const Real Bsq   = m::max(dot(Bcon, Bcov), SMALL);
-                            const Real B_mag = m::sqrt(Bsq);
+                            Real Bvec[] = {0.0, 0.0, 0.0};
+                            SPACELOOP(ii) Bvec[ii] = P(m_u.B1 + ii, k, j, i) * alpha;
+                            Real BdotS = 0.;
+                            SPACELOOP(ii) BdotS += Bvec[ii] * Scov[ii];
+                            Real Bsq = 0.;
+                            SPACELOOP2(ii, jj) Bsq += glower[ii + 1][jj + 1] * Bvec[ii] * Bvec[jj];
+                            Real Sparsq = BdotS * BdotS / Bsq;
+                            Real Sperpsq = Ssq - Sparsq;
+                            Real Spar[3], Sperp[3];
+                            SPACELOOP(ii) Spar[ii] = BdotS * Bvec[ii] / Bsq;
+                            SPACELOOP(ii) Sperp[ii] = Scon[ii] - Spar[ii];
 
-                            // Break up S, perpendicular part will have extra momentum from B
-                            const Real Spar_mag = m::min(dot(Bcon, Scov) / B_mag, S);
-                            const Real Sparcon[GR_DIM] = {Bcon[0] / B_mag * Spar_mag,
-                                                        Bcon[1] / B_mag * Spar_mag,
-                                                        Bcon[2] / B_mag * Spar_mag,
-                                                        Bcon[2] / B_mag * Spar_mag};
-
-                            const Real Sperpcon[GR_DIM] = {Scon[0] - Sparcon[0],
-                                                       Scon[1] - Sparcon[1],
-                                                       Scon[2] - Sparcon[2],
-                                                       Scon[3] - Sparcon[3]};
-                            Real Sperpcov[GR_DIM];
-                            G.lower(Sperpcon, Sperpcov, k, j, i, Loci::center);
-                            const Real Sperp2 = dot(Sperpcon, Sperpcov);
-                            
-                            // Equation for Lorentz factor W
-                            auto f = [&] (Real W) {
-                                const Real rhohW2 = rhoh*W*W;
-                                return Spar_mag*Spar_mag / SQR(rhohW2)
-                                        + Sperp2 / SQR(rhohW2 + Bsq)
-                                        + 1/(W*W) - 1.;
+                            auto func_W = [&] (Real W) {
+                                const Real rhohW2 = rhoh * W * W;
+                                return Sparsq / SQR(rhohW2) +
+                                Sperpsq / SQR(rhohW2 + Bsq) +
+                                1. / (W * W) - 1.;
                             };
 
-                            // Rootfind.  This is guaranteed mathematically to have a solution,
-                            // but track anyway because IEEE is spicy
+                            Real zm = 1.;
+                            Real zp = inverter_floors.gamma_max;
+                            Real z = 0.5*(zm + zp);
+
+                            Real fm = func_W(zm);
+                            Real fp = func_W(zp);
+
                             bool vel_solve_failed = false;
-                            Real W = inverter_floors.gamma_max / 2.;
-                            Real Wm = 1., Wp = inverter_floors.gamma_max;
-                            if (f(Wm) * f(Wp) > 0.) {
-                                vel_solve_failed = true;
-                            } else {
-                                while (1) {
-                                    Real Wc = (Wm + Wp) / 2.;
-                                    Real resv = m::abs(f(Wc));
-                                    if (resv < 1e-8 || m::abs((Wp - Wm) / 2) < 1e-10) {
-                                        W = Wc;
-                                        vel_solve_failed = (resv > 1e-8);
-                                        break;
-                                    }
-                                    // Same sign as left side -> center now left side
-                                    if (f(Wc) * f(Wm) > 0.)
-                                        Wm = Wc;
-                                    else
-                                        Wp = Wc;
+                            for (int iter = 0; iter < 30; ++iter) {
+                                z =  (zm*fp - zp*fm) / (fp-fm);  // linear interpolation to point f(z)=0
+                                Real f = func_W(z);
+                                // Quit if convergence reached
+                                if ((m::abs(f) < 1e-8) || (m::abs(zm-zp) < 1e-10)) {
+                                    // Return failure if 
+                                    vel_solve_failed = m::abs(f) > 1e-8;
+                                    break;
+                                }
+                                // assign zm-->zp if root bracketed by [z,zp]
+                                if (f*fp < 0.0) {
+                                    zm = zp;
+                                    fm = fp;
+                                    zp = z;
+                                    fp = f;
+                                } else {  // assign zp-->z if root bracketed by [zm,z]
+                                    fm = 0.5*fm; // 1/2 comes from "Illinois algorithm" to accelerate convergence
+                                    zp = z;
+                                    fp = f;
                                 }
                             }
 
                             if (!vel_solve_failed) {
-                                VLOOP P(m_p.U1 + v, k, j, i) = W * (
-                                                    Sparcon[1 + v]  / (rhoh * W * W) +
-                                                    Sperpcon[1 + v] / (rhoh * W * W + Bsq));
+                                SPACELOOP(ii) P(m_p.U1+ii, k, j, i) = z * (Spar[ii] / (rhoh_min * z * z) +
+                                                                        Sperp[ii] / (rhoh_min * z * z + Bsq));
+                                // Even if Kastaun hit max_iter, we managed to reset everything correctly
                                 pflagl = static_cast<int>(Inverter::Status::success);
                             } else {
                                 // This should basically NEVER happen
+                                // Only if the numbers are just floating-point gibberish
                                 pflagl = static_cast<int>(Inverter::Status::bad_velocity);
                             }
                         }
