@@ -44,6 +44,7 @@ TaskCollection KHARMADriver::MakeSimpleTaskCollection(BlockList_t &blocks, int s
     auto& flux_pkg = pkgs.at("Fluxes")->AllParams();
     auto& inverter_pkg = pkgs.at("Inverter")->AllParams();
     PARTHENON_REQUIRE(!pkgs.count("B_CT"), "Face-centered B not compatible with simple driver!");
+    // TODO require we're not using B_Cleanup as transport too
     PARTHENON_REQUIRE(!pkgs.count("Electrons"), "Electrons not compatible with simple driver!");
     PARTHENON_REQUIRE(!flux_pkg.Get<bool>("use_fofc"), "Flux corrections not compatible with simple driver!");
     PARTHENON_REQUIRE(inverter_pkg.Get<Inverter::Type>("inverter_type") == Inverter::Type::kastaun,

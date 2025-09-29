@@ -73,6 +73,10 @@ std::shared_ptr<KHARMAPackage> B_CT::Initialize(ParameterInput *pin, std::shared
     if (lazy_prolongation && pin->GetString("parthenon/mesh", "refinement") == "adaptive")
         throw std::runtime_error("Cannot use non-divergence-preserving prolongation in AMR!");
 
+    // TODO don't set this unless we're reconnecting at boundaries (can't just check, we load Boundaries pkg later)
+    int reconnection_outer_buffer = pin->GetOrAddInteger("b_field", "reconnection_outer_buffer", 10);
+    params.Add("reconnection_outer_buffer", reconnection_outer_buffer);
+
     // FIELDS
 
     // Flags for B fields on faces.
@@ -385,7 +389,7 @@ TaskStatus B_CT::CalculateEMF(MeshData<Real> *md)
             );
         } else if (scheme == "gs05_c" || scheme == "sg07") {
             auto& rho = md->PackVariablesAndFluxes(std::vector<std::string>{"cons.rho"});
-            pmb0->par_for("B_CT_emf_GS05_c", block.s, block.e, b1.ks, b1.ke, b1.js, b1.je, b1.is, b1.ie,
+            pmb0->par_for("B_CT_emf_SG07", block.s, block.e, b1.ks, b1.ke, b1.js, b1.je, b1.is, b1.ie,
                 KOKKOS_LAMBDA (const int &bl, const int &k, const int &j, const int &i) {
                     // Following adapted closely from AthenaK, including clever use of the mass flux for the
                     // sign of the contact mode.
@@ -528,6 +532,11 @@ TaskStatus B_CT::DerefinePoles(MeshData<Real> *md)
                 const int offset = (binner) ? 1 : -1; // offset to read the physical face values
                 const int point_out = offset; // if F2 B field at j_f + offset face is positive when pointing out of the cell, +1.
 
+                // Should we allow flux through the pole?
+                auto &bpars = pmesh->packages.Get("Boundaries")->AllParams();
+                const bool allow_flux = binner ? bpars.Get<bool>("excise_flux_inner_x2"):
+                                                 bpars.Get<bool>("excise_flux_outer_x2");
+
                 // F1 average
                 pmb->par_for("B_CT_derefine_poles_avg_F1", bCC.ks, bCC.ke, j_p.s, j_p.e, bF1.is, bF1.ie,
                     KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
@@ -554,7 +563,7 @@ TaskStatus B_CT::DerefinePoles(MeshData<Real> *md)
                         // starting k-index of the coarse cell
                         const int k_start = k - k_fine;
 
-                        if (j == j_f) {
+                        if (!allow_flux && j == j_f) {
                             // The fine cells have 0 fluxes through the physical-ghost boundaries.
                             B_avg(F2, 0, k, j, i) = 0.;
                         } else { // average the fine cells

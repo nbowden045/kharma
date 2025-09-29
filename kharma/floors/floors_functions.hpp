@@ -234,7 +234,7 @@ KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::drift>(FLOOR_ONE_ARGS)
     // t-component of drift velocity (refer R17 Eqn B13)
     ucon_dr[0] = 1. / m::sqrt(1. / (Dtmp.ucon[0]*Dtmp.ucon[0]) + vpar*vpar);
     // spatial components of drift velocity (refer R17 Eqn B11)
-    DLOOP1 ucon_dr[mu] = Dtmp.ucon[mu] * (ucon_dr[0] / Dtmp.ucon[0]) - (vpar * Bcon[mu] * ucon_dr[0] / B_mag);
+    VLOOP ucon_dr[1 + v] = Dtmp.ucon[1 + v] * (ucon_dr[0] / Dtmp.ucon[0]) - (vpar * Bcon[1 + v] * ucon_dr[0] / B_mag);
 
     // Update rho, uu and compute new enthalpy
     P(m_p.RHO, k, j, i) = m::max(rho, rhoflr_max);
@@ -248,7 +248,7 @@ KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::drift>(FLOOR_ONE_ARGS)
 
     // New fluid four velocity (refer R17 Eqns B13 and B11)
     Dtmp.ucon[0] = 1. / m::sqrt(1/(ucon_dr[0]*ucon_dr[0]) - vpar*vpar);
-    DLOOP1 Dtmp.ucon[mu] = ucon_dr[mu] * (Dtmp.ucon[0] / ucon_dr[0]) + (vpar * Bcon[mu] * Dtmp.ucon[0] / B_mag);
+    VLOOP Dtmp.ucon[1 + v] = ucon_dr[1 + v] * (Dtmp.ucon[0] / ucon_dr[0]) + (vpar * Bcon[1 + v] * Dtmp.ucon[0] / B_mag);
     G.lower(Dtmp.ucon, Dtmp.ucov, k, j, i, Loci::center);
 
     // New velocity primitives
@@ -270,7 +270,8 @@ KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::normal_onedw>(FLOOR_ONE_
     // reducing the Lorentz factor)
     const Real rho_add    = m::max(0., rhoflr_max - P(m_p.RHO, k, j, i));
     const Real u_add      = m::max(0., uflr_max - P(m_p.UU, k, j, i));
-    const Real uvec[NVEC] = {P(m_p.U1, k, j, i), P(m_p.U2, k, j, i), P(m_p.U3, k, j, i)};
+    //const Real uvec[NVEC] = {P(m_p.U1, k, j, i), P(m_p.U2, k, j, i), P(m_p.U3, k, j, i)};
+    const Real uvec[NVEC] = {0.};
     const Real B[NVEC] = {0.};
 
     // 2. Calculate the increase in conserved mass/energy corresponding to the new material.
@@ -286,7 +287,7 @@ KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::normal_onedw>(FLOOR_ONE_
 
     // Recover primitive variables from conserved versions
     return Inverter::u_to_p<Inverter::Type::onedw>(G, U, m_u, gam, k, j, i, P, m_p, Loci::center,
-                                                    8, 1e-8);
+                                                    8, 1e-8, false);
 }
 
 template<>
@@ -299,7 +300,9 @@ KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::normal_kastaun>(FLOOR_ON
     // reducing the Lorentz factor)
     const Real rho_add    = m::max(0., rhoflr_max - P(m_p.RHO, k, j, i));
     const Real u_add      = m::max(0., uflr_max - P(m_p.UU, k, j, i));
-    const Real uvec[NVEC] = {P(m_p.U1, k, j, i), P(m_p.U2, k, j, i), P(m_p.U3, k, j, i)};
+    // TODO turn this into an option maybe? Or maybe set rhoflr/uflr using it
+    //const Real uvec[NVEC] = {P(m_p.U1, k, j, i), P(m_p.U2, k, j, i), P(m_p.U3, k, j, i)};
+    const Real uvec[NVEC] = {0.};
     const Real B[NVEC] = {0.};
 
     // 2. Calculate the increase in conserved mass/energy corresponding to the new material.
@@ -313,7 +316,7 @@ KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::normal_kastaun>(FLOOR_ON
 
     // Recover new primitive variables.  Use Kastaun with safe parameters so we don't fail often
     return Inverter::u_to_p<Inverter::Type::kastaun>(G, U, m_u, gam, k, j, i, P, m_p, Loci::center,
-                                                     25, 1e-12);
+                                                     25, 1e-12, true);
 }
 
 // These are implemented as special cases in the kernel in floors_impl.hpp
