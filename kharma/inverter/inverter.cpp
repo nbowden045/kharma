@@ -217,10 +217,12 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                 }
                 if (fflagl) {
                     // Add a floor to density which controls wayward velocities
+                    bool used_rho_to_slow = false;
                     if (inverter_floors.use_rho_to_slow) {
-                        // Calculate necessary rho
-                        const Real rho = std::max(P(m_p.RHO, k, j, i), rhoflr_max);
-                        const Real u = std::max(P(m_p.UU, k, j, i), uflr_max);
+                        //const Real rho = std::max(P(m_p.RHO, k, j, i), rhoflr_max);
+                        //const Real u = std::max(P(m_p.UU, k, j, i), uflr_max);
+                        const Real rho = P(m_p.RHO, k, j, i);
+                        const Real u = P(m_p.UU, k, j, i);
                         const Real rhoh = rho + gam * u;
                         const Real alpha  = 1. / m::sqrt(-G.gcon(Loci::center, j, i, 0, 0));
                         const Real a_over_g = alpha / G.gdet(Loci::center, j, i);
@@ -248,6 +250,8 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                         const Real rhoh_min = m::sqrt(Ssq) / rhoh_denom_max;
                         if (rhoh < rhoh_min) {
                             fflagl |= Floors::FFlag::INVERTER_GAMMA;
+                            // Proportional increases to rho,u preserve temperature
+                            // TODO could play with this ratio
                             P(m_p.RHO, k, j, i) = rho * rhoh_min/rhoh;
                             P(m_p.UU, k, j, i) = u * rhoh_min/rhoh;
 
@@ -264,7 +268,7 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                             SPACELOOP(ii) Sperp[ii] = Scon[ii] - Spar[ii];
 
                             auto func_W = [&] (Real W) {
-                                const Real rhohW2 = rhoh * W * W;
+                                const Real rhohW2 = rhoh_min * W * W;
                                 return Sparsq / SQR(rhohW2) +
                                 Sperpsq / SQR(rhohW2 + Bsq) +
                                 1. / (W * W) - 1.;
@@ -305,13 +309,17 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                                                                         Sperp[ii] / (rhoh_min * z * z + Bsq));
                                 // Even if Kastaun hit max_iter, we managed to reset everything correctly
                                 pflagl = static_cast<int>(Inverter::Status::success);
+                                used_rho_to_slow = true;
                             } else {
                                 // This should basically NEVER happen
                                 // Only if the numbers are just floating-point gibberish
                                 pflagl = static_cast<int>(Inverter::Status::bad_velocity);
                             }
                         }
-                    } else {
+                    }
+
+                    // If we haven't used floors to adjust the velocity, apply them in NOF
+                    if (!used_rho_to_slow) {
                         // Apply floors to P -- this calls inversion again
                         pflagl = Floors::apply_floors<Floors::InjectionFrame::normal_kastaun>(G, P, m_p, gam, k, j, i,
                                 rhoflr_max, uflr_max, U, m_u);
@@ -332,6 +340,13 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                     P(m_p.U2, k, j, i) = 0.;
                     P(m_p.U3, k, j, i) = 0.;
                     pflagl = static_cast<int>(Inverter::Status::success);
+                }
+                // If we applied floors but we won't fix later, update U
+                if (fflagl && !pflagl) {
+                    // This is explicitly a GRMHD-only function, we don't need to account for
+                    // EMHD here.  Also this is done next anyway in the KHARMA driver,
+                    // but we want to eventually remove that function.
+                    GRMHD::p_to_u(G, P, m_p, gam, k, j, i, U, m_u, Loci::center);
                 }
 
                 fflag(0, k, j, i) = fflagl;
