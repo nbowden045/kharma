@@ -383,7 +383,7 @@ Packages_t KHARMA::ProcessPackages(std::unique_ptr<ParameterInput> &pin)
     // 1. Prefer B_CT, it's better tested and more flexible
     auto t_b_field = t_none;
     bool multilevel = pin->GetOrAddString("parthenon/mesh", "refinement", "none") != "none";
-    std::string b_field_solver = pin->GetOrAddString("b_field", "solver",  "face_ct");
+    std::string b_field_solver = pin->GetOrAddString("b_field", "solver", "face_ct");
     if (b_field_solver == "none" || b_field_solver == "cleanup" || b_field_solver == "b_cleanup") {
         // Don't add a B field here
     } else if (b_field_solver == "constrained_transport" || b_field_solver == "face_ct") {
@@ -440,7 +440,8 @@ Packages_t KHARMA::ProcessPackages(std::unique_ptr<ParameterInput> &pin)
     KHARMA::AddPackage(packages, Flux::Initialize, pin.get());
 
     // ISMR temporaries must be full size
-    if (pin->GetOrAddBoolean("ismr", "on", false)) {
+    if (pin->GetOrAddBoolean("ismr", "on", false) || pin->DoesParameterExist("ismr", "nlevels")) {
+        pin->SetBoolean("ismr", "on", true);
         KHARMA::AddPackage(packages, ISMR::Initialize, pin.get());
     }
 

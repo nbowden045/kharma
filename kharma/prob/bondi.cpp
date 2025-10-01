@@ -99,9 +99,6 @@ TaskStatus InitializeBondi(std::shared_ptr<MeshBlockData<Real>>& rc, ParameterIn
     auto inner_dirichlet = pin->GetString("boundaries", "inner_x1") == "dirichlet";
     if (outer_dirichlet || inner_dirichlet) {
         SetBondi<IndexDomain::entire>(rc); // TODO iterate & set any bounds specifically?
-        // Freeze the newly set bounds immediately (will re-freeze w/B later)
-        Flux::BlockPtoU(rc.get(), IndexDomain::entire);
-        KBoundaries::FreezeDirichletBlock(rc.get());
     } else {
         // Generally, we only set the interior domain, not the ghost zones.
         // This tests that PostInitialize will correctly fill all ghosts
@@ -135,7 +132,7 @@ TaskStatus SetBondiImpl(std::shared_ptr<MeshBlockData<Real>>& rc, IndexDomain do
 {
     auto pmb = rc->GetBlockPointer();
 
-    //std::cerr << "Bondi on domain: " << KBoundaries::BoundaryName(KBoundaries::BoundaryFaceOf(domain)) << "coarse: " << coarse << std::endl;
+    //std::cout << "Setting bondi on domain: " << KBoundaries::BoundaryName(KBoundaries::BoundaryFaceOf(domain)) << " coarse: " << coarse << std::endl;
 
     PackIndexMap prims_map, cons_map;
     auto P = GRMHD::PackMHDPrims(rc.get(), prims_map);
@@ -168,6 +165,9 @@ TaskStatus SetBondiImpl(std::shared_ptr<MeshBlockData<Real>>& rc, IndexDomain do
     const IndexRange ib = bounds.GetBoundsI(domain);
     const IndexRange jb = bounds.GetBoundsJ(domain);
     const IndexRange kb = bounds.GetBoundsK(domain);
+
+    //std::cout << "Setting Bondi on range: (" << ib.s << " " << ib.e << " " << jb.s << " " << jb.e << " " << kb.s << " " << kb.e << ")" << std::endl;
+    //std::cout << "nghost is " << Globals::nghost << std::endl;
 
     pmb->par_for("bondi_boundary", kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
         KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {

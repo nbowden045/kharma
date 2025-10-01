@@ -41,6 +41,7 @@
 
 #include <parthenon/parthenon.hpp>
 #include <prolong_restrict/pr_ops.hpp>
+#include <stdexcept>
 
 using namespace parthenon;
 using parthenon::refinement_ops::ProlongateSharedMinMod;
@@ -253,14 +254,14 @@ TaskStatus B_CT::DangerousPtoU(MeshData<Real> *md, IndexDomain domain, bool coar
             auto rc = md->GetBlockData(i);
             auto pmb = rc->GetBlockPointer();
             auto dB_block = rc->PackVariables(std::vector<std::string>{"dB"});
-            if (pmb->boundary_flag[BoundaryFace::inner_x2] == BoundaryFlag::user) {
+            if (KBoundaries::IsPhysicalBoundary(pmb, BoundaryFace::inner_x2)) {
                 pmb->par_for("dB_boundary", bf2.ks, bf2.ke, bf2.is, bf2.ie,
                     KOKKOS_LAMBDA (const int &k, const int &i) {
                         dB_block(F2, 0, k, bf2.js, i) = 0.;
                     }
                 );
             }
-            if (pmb->boundary_flag[BoundaryFace::outer_x2] == BoundaryFlag::user) {
+            if (KBoundaries::IsPhysicalBoundary(pmb, BoundaryFace::outer_x2)) {
                 pmb->par_for("dB_boundary", bf2.ks, bf2.ke, bf2.is, bf2.ie,
                     KOKKOS_LAMBDA (const int &k, const int &i) {
                         dB_block(F2, 0, k, bf2.je, i) = 0.;
@@ -286,6 +287,7 @@ TaskStatus B_CT::CalculateEMF(MeshData<Real> *md)
 {
     auto pmesh = md->GetMeshPointer();
     const int ndim = pmesh->ndim;
+    if (ndim < 2) throw std::runtime_error("Face-centered constrained transport does not support 1D! Use `flux_ct` instead.")
 
     // EMF temporary
     auto& emf_pack = md->PackVariables(std::vector<std::string>{"B_CT.emf"});
@@ -510,7 +512,7 @@ TaskStatus B_CT::DerefinePoles(MeshData<Real> *md)
             auto bdir = KBoundaries::BoundaryDirection(bface);
             auto domain = KBoundaries::BoundaryDomain(bface);
             auto binner = KBoundaries::BoundaryIsInner(bface);
-            if (bdir == X2DIR && pmb->boundary_flag[bface] == BoundaryFlag::user) {
+            if (bdir == X2DIR && KBoundaries::IsPhysicalBoundary(pmb, bface)) {
                 // indices
                 // TODO also get ranges in cells from the beginning rather than using j_p & calculating j_c
                 IndexRange3 bCC = KDomain::GetRange(rc, IndexDomain::interior, CC);
@@ -667,6 +669,7 @@ double B_CT::MaxDivB(MeshData<Real> *md)
 {
     auto pmesh = md->GetMeshPointer();
     const int ndim = pmesh->ndim;
+    if (ndim < 2) return 0.;
 
     auto B_U = md->PackVariables(std::vector<std::string>{"cons.fB"});
 
