@@ -34,7 +34,6 @@ if [[ $HOST == *"rc.fas.harvard.edu" ]]; then
       #export KOKKOS_NUM_DEVICES=4
     fi
     
-    export MPICH_GPU_SUPPORT_ENABLED=1
     #module load intel/23.0.0-fasrc01 openmpi/4.1.4-fasrc01 cmake/3.25.2-fasrc01
     #MPI_EXTRA_ARGS="--map-by ppr:4:node:pe=16"
     MPI_EXE="srun" #"mpirun"
@@ -48,11 +47,15 @@ if [[ $HOST == *"rc.fas.harvard.edu" ]]; then
     CXX_NATIVE=g++
     if [[ "$ARGS" == *"cuda"* ]]; then
       DEVICE_ARCH=AMPERE80 ## rocky_gpu
+      export MPICH_GPU_SUPPORT_ENABLED=1
       if [[ "$ARGS" == *"volta"* ]]; then
         DEVICE_ARCH=VOLTA70
       fi
       # CHANGE TO A NEWER CUDA
       #module load cuda/12.2.0-fasrc01 # this should be loaded automatically
+    else
+      # General Cannon CPU machines have 112 threads
+      export OMP_NUM_THREADS=56
     fi
 fi
 

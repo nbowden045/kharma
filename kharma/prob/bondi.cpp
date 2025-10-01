@@ -36,6 +36,7 @@
 
 #include "boundaries.hpp"
 #include "floors.hpp"
+#include "flux.hpp"
 #include "flux_functions.hpp"
 
 void AddBondiParameters(ParameterInput *pin, Packages_t &packages)
@@ -98,6 +99,9 @@ TaskStatus InitializeBondi(std::shared_ptr<MeshBlockData<Real>>& rc, ParameterIn
     auto inner_dirichlet = pin->GetString("boundaries", "inner_x1") == "dirichlet";
     if (outer_dirichlet || inner_dirichlet) {
         SetBondi<IndexDomain::entire>(rc); // TODO iterate & set any bounds specifically?
+        // Freeze the newly set bounds immediately (will re-freeze w/B later)
+        Flux::BlockPtoU(rc.get(), IndexDomain::entire);
+        KBoundaries::FreezeDirichletBlock(rc.get());
     } else {
         // Generally, we only set the interior domain, not the ghost zones.
         // This tests that PostInitialize will correctly fill all ghosts

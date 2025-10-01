@@ -310,7 +310,7 @@ void B_CT::ReconnectBoundaryB3(MeshBlockData<Real> *rc, IndexDomain domain, cons
     IndexRange3 bi = KDomain::GetRange(rc, IndexDomain::interior, F3, coarse);
     const int jf = (binner) ? bi.js : bi.je; // j index of last zone next to pole
     parthenon::par_for_outer(DEFAULT_OUTER_LOOP_PATTERN, "reduce_B3_" + bname, pmb->exec_space,
-        0, 1, 0, fpack.GetDim(4)-1, b.is + 6, b.ie - reconnection_outer_buffer,
+        0, 1, 0, fpack.GetDim(4)-1, b.is, b.ie - reconnection_outer_buffer,
         KOKKOS_LAMBDA(parthenon::team_mbr_t member, const int &v, const int& i) {
             // Sum the first rank of B3
             double B3_sum = 0.;
