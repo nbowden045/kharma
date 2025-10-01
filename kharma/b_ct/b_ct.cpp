@@ -287,7 +287,7 @@ TaskStatus B_CT::CalculateEMF(MeshData<Real> *md)
 {
     auto pmesh = md->GetMeshPointer();
     const int ndim = pmesh->ndim;
-    if (ndim < 2) throw std::runtime_error("Face-centered constrained transport does not support 1D! Use `flux_ct` instead.")
+    if (ndim < 2) throw std::runtime_error("Face-centered constrained transport does not support 1D! Use `flux_ct` instead.");
 
     // EMF temporary
     auto& emf_pack = md->PackVariables(std::vector<std::string>{"B_CT.emf"});
