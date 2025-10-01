@@ -36,5 +36,5 @@ test_resize () {
     pyharm check-basics --allowed_divb=1e-8 resize_restart.out0.final.phdf
 }
 
-test_resize cell ""
-test_resize face b_field/solver=face_ct
+test_resize cell "b_field/solver=flux_ct"
+test_resize face "b_field/solver=face_ct"

@@ -376,10 +376,11 @@ TaskID KHARMADriver::AddStateUpdate(TaskID& t_start, TaskList& tl, MeshData<Real
     auto pmb0  = md_full_step_init->GetBlockData(0)->GetBlockPointer();
     auto& pkgs = pmb0->packages.AllPackages();
 
-    // If we're explicitly evolving, UtoP needs a guess (except Kastaun inverter)
+    // If we're explicitly evolving, UtoP needs a guess
+    // TODO why is this necessary still?  Is it necessary on every AddStateUpdate?
     if (!pkgs.at("GRMHD")->Param<bool>("implicit")) {
         t_copy_prims = tl.AddTask(t_start, Copy<MeshData<Real>>,
-                                    std::vector<MetadataFlag>({Metadata::GetUserFlag("HD"), Metadata::GetUserFlag("Primitive")}),
+                                    std::vector<MetadataFlag>({Metadata::GetUserFlag("MHD"), Metadata::GetUserFlag("Primitive")}),
                                     md_sub_step_init, md_update);
     }
 

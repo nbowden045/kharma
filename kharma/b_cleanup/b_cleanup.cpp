@@ -512,7 +512,7 @@ TaskStatus B_Cleanup::CenterLaplacian(MeshData<Real>* md, const std::string& p_v
             auto pmb = rc->GetBlockPointer();
             auto lap_block = rc->PackVariables(std::vector<std::string>{lap_var});
             const IndexRange3 bic = KDomain::GetRange(md, IndexDomain::interior);
-            if (KBoundaries::IsPhysicalBoundary(pmb, BoundaryFace::inner_x2)) {
+            if (KBoundaries::IsPhysicalBoundary(pmb, BoundaryFace::inner_x1)) {
                 pmb->par_for("lap_boundary", bc.ks, bc.ke, bc.js, bc.je, bc.is, bic.is,
                     KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
                         lap_block(0, k, j, i) = 0.;
@@ -527,7 +527,7 @@ TaskStatus B_Cleanup::CenterLaplacian(MeshData<Real>* md, const std::string& p_v
             auto pmb = rc->GetBlockPointer();
             auto lap_block = rc->PackVariables(std::vector<std::string>{lap_var});
             const IndexRange3 bic = KDomain::GetRange(md, IndexDomain::interior);
-            if (KBoundaries::IsPhysicalBoundary(pmb, BoundaryFace::outer_x2)) {
+            if (KBoundaries::IsPhysicalBoundary(pmb, BoundaryFace::outer_x1)) {
                 pmb->par_for("lap_boundary", bc.ks, bc.ke, bc.js, bc.je, bic.ie, bc.ie,
                     KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
                         lap_block(0, k, j, i) = 0.;
