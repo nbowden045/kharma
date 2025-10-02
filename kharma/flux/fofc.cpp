@@ -84,8 +84,8 @@ TaskStatus Flux::MarkFOFC(MeshData<Real> *guess)
         for (int i_block = 0; i_block < guess->NumBlocks(); i_block++) {
             auto &rc = guess->GetBlockData(i_block);
             auto pmb = rc->GetBlockPointer();
-            const bool is_inner_x2 = pmb->boundary_flag[BoundaryFace::inner_x2] == BoundaryFlag::user;
-            const bool is_outer_x2 = pmb->boundary_flag[BoundaryFace::outer_x2] == BoundaryFlag::user;
+            const bool is_inner_x2 = KBoundaries::IsPhysicalBoundary(pmb, BoundaryFace::inner_x2);
+            const bool is_outer_x2 = KBoundaries::IsPhysicalBoundary(pmb, BoundaryFace::outer_x2);
             if (is_inner_x2 || is_outer_x2) {
                 auto lfofcflag = rc->PackVariables(std::vector<std::string>{"fofcflag"});
                 if (is_inner_x2) {

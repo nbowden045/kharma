@@ -414,6 +414,7 @@ Packages_t KHARMA::ProcessPackages(std::unique_ptr<ParameterInput> &pin)
     bool use_b_cleanup = b_cleanup_package || is_resize || initial_cleanup;
     pin->SetBoolean("b_cleanup", "on", use_b_cleanup);
     auto t_b_cleanup = t_none;
+    // Load GMG cleanup only if we're using face-centered fields, that's all it supports
     if (use_b_cleanup) {
         if (face_centered_b) {
             t_b_cleanup = tl.AddTask(t_grmhd, KHARMA::AddPackage, packages, B_CleanupGMG::Initialize, pin.get());
@@ -451,7 +452,8 @@ Packages_t KHARMA::ProcessPackages(std::unique_ptr<ParameterInput> &pin)
     KHARMA::AddPackage(packages, Flux::Initialize, pin.get());
 
     // ISMR temporaries must be full size
-    if (pin->GetOrAddBoolean("ismr", "on", false)) {
+    if (pin->GetOrAddBoolean("ismr", "on", false) || pin->DoesParameterExist("ismr", "nlevels")) {
+        pin->SetBoolean("ismr", "on", true);
         KHARMA::AddPackage(packages, ISMR::Initialize, pin.get());
     }
 

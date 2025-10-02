@@ -34,6 +34,7 @@
 #include "boundaries.hpp"
 
 #include "bondi.hpp"
+#include "boundary_types.hpp"
 #include "decs.hpp"
 #include "domain.hpp"
 #include "kharma.hpp"
@@ -109,7 +110,7 @@ std::shared_ptr<KHARMAPackage> KBoundaries::Initialize(ParameterInput *pin, std:
     // Face-centered fields: some duplicate stuff, leaving it separate for now
     FC ghost_vars_f = FC({Metadata::FillGhost, Metadata::Face})
                 - FC({Metadata::GetUserFlag("StartupOnly")});
-    int nvar_f = 3 * m::max(res_state->GetPackDimension(ghost_vars_f), 1);
+    int nvar_f = 3 * res_state->GetPackDimension(ghost_vars_f);
 
     // TODO encapsulate this
     Metadata m_x1, m_x2, m_x3, m_x1_f, m_x2_f, m_x3_f;
@@ -555,14 +556,14 @@ void KBoundaries::ApplyBoundary(std::shared_ptr<MeshBlockData<Real>> &rc, IndexD
         // exactly the same function that Parthenon does.  This ensures we're applying
         // the same thing, just emulating calling it after X2.
         if (params.Get<bool>("fix_corner_inner")) {
-            if (pmb->boundary_flag[BoundaryFace::inner_x1] == BoundaryFlag::user) {
+            if (KBoundaries::IsPhysicalBoundary(pmb, BoundaryFace::inner_x1)) {
                 Flag("FixCorner");
                 ApplyBoundary(rc, IndexDomain::inner_x1, coarse);
                 EndFlag();
             }
         }
         if (params.Get<bool>("fix_corner_outer")) {
-            if (pmb->boundary_flag[BoundaryFace::outer_x1] == BoundaryFlag::user) {
+            if (KBoundaries::IsPhysicalBoundary(pmb, BoundaryFace::outer_x1)) {
                 Flag("FixCorner");
                 ApplyBoundary(rc, IndexDomain::outer_x1, coarse);
                 EndFlag();
@@ -668,7 +669,7 @@ TaskStatus KBoundaries::FixFlux(MeshData<Real> *md)
             if (params.Get<bool>("check_inflow_" + bname)) {
                 const int m_rho = cons_map["cons.rho"].first;
                 // ...and if this face of the block corresponds to a global boundary...
-                if (pmb->boundary_flag[bface] == BoundaryFlag::user) {
+                if (KBoundaries::IsPhysicalBoundary(pmb, bface)) {
                     if (binner) {
                         pmb->par_for(
                             "zero_inflow_flux_" + bname, b.ks, b.ke, b.js, b.je, b.is, b.ie,
@@ -690,7 +691,7 @@ TaskStatus KBoundaries::FixFlux(MeshData<Real> *md)
             // If we should zero flux through this face...
             if (params.Get<bool>("zero_flux_" + bname)) {
                 // ...and if this face of the block corresponds to a global boundary...
-                if (pmb->boundary_flag[bface] == BoundaryFlag::user) {
+                if (KBoundaries::IsPhysicalBoundary(pmb, bface)) {
                     pmb->par_for(
                         "zero_flux_" + bname, 0, F.GetDim(4) - 1, b.ks, b.ke, b.js, b.je, b.is, b.ie,
                         KOKKOS_LAMBDA(const int &p, const int &k, const int &j, const int &i) {
@@ -703,7 +704,7 @@ TaskStatus KBoundaries::FixFlux(MeshData<Real> *md)
             // If we should replace fluxes with excised versions...
             if (params.Get<bool>("excise_flux_" + bname)) {
                 // ...and if this face of the block corresponds to a global boundary...
-                if (pmb->boundary_flag[bface] == BoundaryFlag::user) {
+                if (IsPhysicalBoundary(pmb, bface)) {
                     if (bdir != 2) throw std::runtime_error("Excised polar fluxes only fully implemented in X2!");
 
                     // Pack w/B to match indices with the `Flux.X` below
@@ -892,7 +893,7 @@ void KBoundaries::AddSource(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDoma
             // If we should replace fluxes with excised versions...
             if (params.Get<bool>("excise_flux_" + bname)) {
                 // ...and if this face of the block corresponds to a global boundary...
-                if (pmb->boundary_flag[bface] == BoundaryFlag::user) {
+                if (IsPhysicalBoundary(pmb, bface)) {
                     if (bdir != 2) throw std::runtime_error("Excised polar fluxes only fully implemented in X2!");
 
                     const IndexRange3 bi = KDomain::GetRange(rc, IndexDomain::interior);

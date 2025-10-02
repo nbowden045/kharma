@@ -309,8 +309,8 @@ Real EstimateTimestep(MeshData<Real> *md)
     for (auto &pmb : pmesh->block_list) {
         auto rc = pmb->meshblock_data.Get(md->StageName()).get();
         // We only need this block-wise to check boundary flags for ISMR, could special-case that
-        const bool polar_inner_x2 = pmb->boundary_flag[BoundaryFace::inner_x2] == BoundaryFlag::user;
-        const bool polar_outer_x2 = pmb->boundary_flag[BoundaryFace::outer_x2] == BoundaryFlag::user;
+        const bool is_inner_x2 = KBoundaries::IsPhysicalBoundary(pmb, BoundaryFace::inner_x2);
+        const bool is_outer_x2 = KBoundaries::IsPhysicalBoundary(pmb, BoundaryFace::outer_x2);
 
         const auto& cmax  = rc->PackVariables(std::vector<std::string>{"Flux.cmax"});
         const auto& cmin  = rc->PackVariables(std::vector<std::string>{"Flux.cmin"});
@@ -327,18 +327,18 @@ Real EstimateTimestep(MeshData<Real> *md)
                 int ismr_factor = 1;
                 double excise_factor = 1.0;
                 double courant_limit = 1.0;
-                if (ismr_poles && polar_inner_x2 && j < (b.js + ismr_nlevels)) {
+                if (ismr_poles && is_inner_x2 && j < (b.js + ismr_nlevels)) {
                     ismr_factor = m::pow(2, ismr_nlevels - (j - b.js));
                     courant_limit = 0.5;
                 }
-                if (ismr_poles && polar_outer_x2 && j > (b.je - ismr_nlevels)) {
+                if (ismr_poles && is_outer_x2 && j > (b.je - ismr_nlevels)) {
                     ismr_factor = m::pow(2, ismr_nlevels - (b.je - j));
                     courant_limit = 0.5;
                 }
 
-                if (excise_inner_x2 && polar_inner_x2 && j == b.js) {
+                if (excise_inner_x2 && is_inner_x2 && j == b.js) {
                     excise_factor = 0.5;
-                } else if (excise_outer_x2 && polar_outer_x2 && j == b.je) {
+                } else if (excise_outer_x2 && is_outer_x2 && j == b.je) {
                     excise_factor = 0.5;
                 }
 
@@ -680,7 +680,7 @@ void UpdateAveragedCtop(MeshData<Real> *md)
                 b3_is_reconnected ||
                 params.Get<bool>("excise_flux_" + bname)) {
                 // ...and if this face of the block corresponds to a global boundary...
-                if (pmb->boundary_flag[bface] == BoundaryFlag::user) {
+                if (KBoundaries::IsPhysicalBoundary(pmb, bface)) {
                     PackIndexMap prims_map, cons_map;
                     auto P = rc->PackVariables({Metadata::GetUserFlag("Primitive"), Metadata::Cell}, prims_map);
                     const VarMap m_p(prims_map, false);

@@ -36,6 +36,7 @@
 
 #include "boundaries.hpp"
 #include "floors.hpp"
+#include "flux.hpp"
 #include "flux_functions.hpp"
 
 void AddBondiParameters(ParameterInput *pin, Packages_t &packages)
@@ -131,7 +132,7 @@ TaskStatus SetBondiImpl(std::shared_ptr<MeshBlockData<Real>>& rc, IndexDomain do
 {
     auto pmb = rc->GetBlockPointer();
 
-    //std::cerr << "Bondi on domain: " << KBoundaries::BoundaryName(KBoundaries::BoundaryFaceOf(domain)) << "coarse: " << coarse << std::endl;
+    //std::cout << "Setting bondi on domain: " << KBoundaries::BoundaryName(KBoundaries::BoundaryFaceOf(domain)) << " coarse: " << coarse << std::endl;
 
     PackIndexMap prims_map, cons_map;
     auto P = GRMHD::PackMHDPrims(rc.get(), prims_map);
@@ -164,6 +165,9 @@ TaskStatus SetBondiImpl(std::shared_ptr<MeshBlockData<Real>>& rc, IndexDomain do
     const IndexRange ib = bounds.GetBoundsI(domain);
     const IndexRange jb = bounds.GetBoundsJ(domain);
     const IndexRange kb = bounds.GetBoundsK(domain);
+
+    //std::cout << "Setting Bondi on range: (" << ib.s << " " << ib.e << " " << jb.s << " " << jb.e << " " << kb.s << " " << kb.e << ")" << std::endl;
+    //std::cout << "nghost is " << Globals::nghost << std::endl;
 
     pmb->par_for("bondi_boundary", kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
         KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {

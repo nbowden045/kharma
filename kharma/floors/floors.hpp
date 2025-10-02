@@ -164,7 +164,7 @@ inline Prescription MakePrescription(parthenon::ParameterInput *pin, std::string
     p.radius_dependent_floors = pin->GetOrAddBoolean("floors", "radius_dependent_floors", false); 
     p.floors_switch_r = pin->GetOrAddReal("floors", "floors_switch_r", 50.);
 
-    p.use_rho_to_slow = pin->GetOrAddBoolean("floors", "use_rho_to_slow", true);
+    p.use_rho_to_slow = pin->GetOrAddBoolean("floors", "use_rho_to_slow", false);
 
     return p;
 }
