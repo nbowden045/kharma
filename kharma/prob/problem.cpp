@@ -158,7 +158,10 @@ void KHARMA::ProblemGenerator(MeshBlock *pmb, ParameterInput *pin)
     // problems, since the magnetic field is not yet initialized.
     // However, the polar mitigations expect P,U in a consistent state,
     // so we have to give them something.
-    Flux::BlockPtoU(rc.get(), IndexDomain::interior);
+    // Problems with Dirichlet boundaries should just initialize the whole grid,
+    // and the boundaries will be "frozen in" here (and re-frozen if B is added later)
+    Flux::BlockPtoU(rc.get(), IndexDomain::entire);
+    KBoundaries::FreezeDirichletBlock(rc.get());
 
     EndFlag();
 }

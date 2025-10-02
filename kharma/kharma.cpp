@@ -281,37 +281,40 @@ void KHARMA::FixParameters(ParameterInput *pin, bool is_parthenon_restart)
         pin->GetOrAddReal("parthenon/mesh", "x3max", tmp_coords.stopx(3));
 
     // Also set x1 refinements as a proportion of size
-    // TODO all regions!
-    if (pin->DoesBlockExist("parthenon/static_refinement0")) {
-        Real startx1 = pin->GetReal("parthenon/mesh", "x1min");
-        Real stopx1 = pin->GetReal("parthenon/mesh", "x1max");
-        Real lx1 = stopx1 - startx1;
-        Real startx1_prop = pin->GetReal("parthenon/static_refinement0", "x1min");
-        Real stopx1_prop = pin->GetReal("parthenon/static_refinement0", "x1max");
-        //std::cerr << "StartX1 " << startx1 << " lx1 " << lx1 << "Prop " << startx1_prop << " " << stopx1_prop << std::endl;
-        //std::cerr << "Adjust X1 " << startx1_prop*lx1 + startx1 << " to " << stopx1_prop*lx1 + startx1 << std::endl;
-        pin->SetReal("parthenon/static_refinement0", "x1min", std::max(startx1_prop*lx1 + startx1, startx1));
-        pin->SetReal("parthenon/static_refinement0", "x1max", std::min(stopx1_prop*lx1 + startx1, stopx1));
+    InputBlock *pib = pin->pfirst_block;
+    while (pib != nullptr) {
+        if (pib->block_name.compare(0, 27, "parthenon/static_refinement") == 0) {
+            Real startx1 = pin->GetReal("parthenon/mesh", "x1min");
+            Real stopx1 = pin->GetReal("parthenon/mesh", "x1max");
+            Real lx1 = stopx1 - startx1;
+            Real startx1_prop = pin->GetReal(pib->block_name, "x1min");
+            Real stopx1_prop = pin->GetReal(pib->block_name, "x1max");
+            //std::cerr << "StartX1 " << startx1 << " lx1 " << lx1 << "Prop " << startx1_prop << " " << stopx1_prop << std::endl;
+            //std::cerr << "Adjust X1 " << startx1_prop*lx1 + startx1 << " to " << stopx1_prop*lx1 + startx1 << std::endl;
+            pin->SetReal(pib->block_name, "x1min", std::max(startx1_prop*lx1 + startx1, startx1));
+            pin->SetReal(pib->block_name, "x1max", std::min(stopx1_prop*lx1 + startx1, stopx1));
 
-        if (pin->DoesParameterExist("parthenon/static_refinement0", "x2min")) {
-            Real startx2 = pin->GetReal("parthenon/mesh", "x2min");
-            Real stopx2 = pin->GetReal("parthenon/mesh", "x2max");
-            Real lx2 = stopx2 - startx2;
-            Real startx2_prop = pin->GetReal("parthenon/static_refinement0", "x2min");
-            Real stopx2_prop = pin->GetReal("parthenon/static_refinement0", "x2max");
-            pin->SetReal("parthenon/static_refinement0", "x2min", std::max(startx2_prop*lx2 + startx2, startx2));
-            pin->SetReal("parthenon/static_refinement0", "x2max", std::min(stopx2_prop*lx2 + startx2, stopx2));
-        }
+            if (pin->DoesParameterExist(pib->block_name, "x2min")) {
+                Real startx2 = pin->GetReal("parthenon/mesh", "x2min");
+                Real stopx2 = pin->GetReal("parthenon/mesh", "x2max");
+                Real lx2 = stopx2 - startx2;
+                Real startx2_prop = pin->GetReal(pib->block_name, "x2min");
+                Real stopx2_prop = pin->GetReal(pib->block_name, "x2max");
+                pin->SetReal(pib->block_name, "x2min", std::max(startx2_prop*lx2 + startx2, startx2));
+                pin->SetReal(pib->block_name, "x2max", std::min(stopx2_prop*lx2 + startx2, stopx2));
+            }
 
-        if (pin->DoesParameterExist("parthenon/static_refinement0", "x3min")) {
-            Real startx3 = pin->GetReal("parthenon/mesh", "x3min");
-            Real stopx3 = pin->GetReal("parthenon/mesh", "x3max");
-            Real lx3 = stopx3 - startx3;
-            Real startx3_prop = pin->GetReal("parthenon/static_refinement0", "x3min");
-            Real stopx3_prop = pin->GetReal("parthenon/static_refinement0", "x3max");
-            pin->SetReal("parthenon/static_refinement0", "x3min", std::max(startx3_prop*lx3 + startx3, startx3));
-            pin->SetReal("parthenon/static_refinement0", "x3max", std::min(stopx3_prop*lx3 + startx3, stopx3));
+            if (pin->DoesParameterExist(pib->block_name, "x3min")) {
+                Real startx3 = pin->GetReal("parthenon/mesh", "x3min");
+                Real stopx3 = pin->GetReal("parthenon/mesh", "x3max");
+                Real lx3 = stopx3 - startx3;
+                Real startx3_prop = pin->GetReal(pib->block_name, "x3min");
+                Real stopx3_prop = pin->GetReal(pib->block_name, "x3max");
+                pin->SetReal(pib->block_name, "x3min", std::max(startx3_prop*lx3 + startx3, startx3));
+                pin->SetReal(pib->block_name, "x3max", std::min(stopx3_prop*lx3 + startx3, stopx3));
+            }
         }
+        pib = pib->pnext;
     }
 
     EndFlag();
@@ -380,7 +383,7 @@ Packages_t KHARMA::ProcessPackages(std::unique_ptr<ParameterInput> &pin)
     // 1. Prefer B_CT, it's better tested and more flexible
     auto t_b_field = t_none;
     bool multilevel = pin->GetOrAddString("parthenon/mesh", "refinement", "none") != "none";
-    std::string b_field_solver = pin->GetOrAddString("b_field", "solver",  "face_ct");
+    std::string b_field_solver = pin->GetOrAddString("b_field", "solver", "face_ct");
     if (b_field_solver == "none" || b_field_solver == "cleanup" || b_field_solver == "b_cleanup") {
         // Don't add a B field here
     } else if (b_field_solver == "constrained_transport" || b_field_solver == "face_ct") {
@@ -437,7 +440,8 @@ Packages_t KHARMA::ProcessPackages(std::unique_ptr<ParameterInput> &pin)
     KHARMA::AddPackage(packages, Flux::Initialize, pin.get());
 
     // ISMR temporaries must be full size
-    if (pin->GetOrAddBoolean("ismr", "on", false)) {
+    if (pin->GetOrAddBoolean("ismr", "on", false) || pin->DoesParameterExist("ismr", "nlevels")) {
+        pin->SetBoolean("ismr", "on", true);
         KHARMA::AddPackage(packages, ISMR::Initialize, pin.get());
     }
 

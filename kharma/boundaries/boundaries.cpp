@@ -34,6 +34,7 @@
 #include "boundaries.hpp"
 
 #include "bondi.hpp"
+#include "boundary_types.hpp"
 #include "decs.hpp"
 #include "domain.hpp"
 #include "kharma.hpp"
@@ -67,19 +68,13 @@ std::shared_ptr<KHARMAPackage> KBoundaries::Initialize(ParameterInput *pin, std:
     // Option to excise a bit at the poles when calculating fluxes
     bool excise_polar_flux = pin->GetOrAddBoolean("boundaries", "excise_polar_flux", false);
     params.Add("excise_polar_flux", excise_polar_flux);
-    if (excise_polar_flux) {
-        // These options are opposites
-        pin->SetBoolean("boundaries", "zero_polar_flux", false);
-        // TODO check whether the user explicitly set these false and yell instead of silent override
-        pin->SetBoolean("boundaries", "reconnect_B3_inner_x2", true);
-        pin->SetBoolean("boundaries", "reconnect_B3_outer_x2", true);
-        // These are themselves unstable, and don't help the wake much
-        //pin->SetBoolean("boundaries", "cancel_T3_inner_x2", true);
-        //pin->SetBoolean("boundaries", "cancel_T3_outer_x2", true);
-    }
     // Otherwise, those fluxes should be zero
-    bool zero_polar_flux = pin->GetOrAddBoolean("boundaries", "zero_polar_flux", spherical);
+    bool zero_polar_flux = pin->GetOrAddBoolean("boundaries", "zero_polar_flux", spherical && !excise_polar_flux);
     params.Add("zero_polar_flux", zero_polar_flux);
+    // Throw an error if both are set
+    if (excise_polar_flux && zero_polar_flux) {
+        throw std::runtime_error("Cannot set both boundaries/excise_polar_flux and boundaries/zero_polar_flux!");
+    }
 
     // Apply physical boundaries to conserved GRMHD variables rho u^r, T^mu_nu
     // Probably inadvisable?
@@ -114,7 +109,7 @@ std::shared_ptr<KHARMAPackage> KBoundaries::Initialize(ParameterInput *pin, std:
     // Face-centered fields: some duplicate stuff, leaving it separate for now
     FC ghost_vars_f = FC({Metadata::FillGhost, Metadata::Face})
                 - FC({Metadata::GetUserFlag("StartupOnly")});
-    int nvar_f = 3 * m::max(KHARMA::PackDimension(packages.get(), ghost_vars_f), 1);
+    int nvar_f = 3 * KHARMA::PackDimension(packages.get(), ghost_vars_f);
 
     // TODO encapsulate this
     Metadata m_x1, m_x2, m_x3, m_x1_f, m_x2_f, m_x3_f;
@@ -199,7 +194,8 @@ std::shared_ptr<KHARMAPackage> KBoundaries::Initialize(ParameterInput *pin, std:
             bool clean_face_B = pin->GetOrAddBoolean("boundaries", "clean_face_B_" + bname, (btype == "outflow"));
             params.Add("clean_face_B_"+bname, clean_face_B);
             // Forcibly reconnect field loops that get trapped around the polar boundary
-            bool reconnect_B3 = pin->GetOrAddBoolean("boundaries", "reconnect_B3_" + bname, false);
+            // Needed to keep excised-flux transmitting boundaries stable
+            bool reconnect_B3 = pin->GetOrAddBoolean("boundaries", "reconnect_B3_" + bname, excise_flux);
             params.Add("reconnect_B3_"+bname, reconnect_B3);
 
             // Special EMF averaging.  Allows B3 to "slip" around the pole
@@ -559,14 +555,14 @@ void KBoundaries::ApplyBoundary(std::shared_ptr<MeshBlockData<Real>> &rc, IndexD
         // exactly the same function that Parthenon does.  This ensures we're applying
         // the same thing, just emulating calling it after X2.
         if (params.Get<bool>("fix_corner_inner")) {
-            if (pmb->boundary_flag[BoundaryFace::inner_x1] == BoundaryFlag::user) {
+            if (KBoundaries::IsPhysicalBoundary(pmb, BoundaryFace::inner_x1)) {
                 Flag("FixCorner");
                 ApplyBoundary(rc, IndexDomain::inner_x1, coarse);
                 EndFlag();
             }
         }
         if (params.Get<bool>("fix_corner_outer")) {
-            if (pmb->boundary_flag[BoundaryFace::outer_x1] == BoundaryFlag::user) {
+            if (KBoundaries::IsPhysicalBoundary(pmb, BoundaryFace::outer_x1)) {
                 Flag("FixCorner");
                 ApplyBoundary(rc, IndexDomain::outer_x1, coarse);
                 EndFlag();
@@ -672,7 +668,7 @@ TaskStatus KBoundaries::FixFlux(MeshData<Real> *md)
             if (params.Get<bool>("check_inflow_" + bname)) {
                 const int m_rho = cons_map["cons.rho"].first;
                 // ...and if this face of the block corresponds to a global boundary...
-                if (pmb->boundary_flag[bface] == BoundaryFlag::user) {
+                if (KBoundaries::IsPhysicalBoundary(pmb, bface)) {
                     if (binner) {
                         pmb->par_for(
                             "zero_inflow_flux_" + bname, b.ks, b.ke, b.js, b.je, b.is, b.ie,
@@ -694,7 +690,7 @@ TaskStatus KBoundaries::FixFlux(MeshData<Real> *md)
             // If we should zero flux through this face...
             if (params.Get<bool>("zero_flux_" + bname)) {
                 // ...and if this face of the block corresponds to a global boundary...
-                if (pmb->boundary_flag[bface] == BoundaryFlag::user) {
+                if (KBoundaries::IsPhysicalBoundary(pmb, bface)) {
                     pmb->par_for(
                         "zero_flux_" + bname, 0, F.GetDim(4) - 1, b.ks, b.ke, b.js, b.je, b.is, b.ie,
                         KOKKOS_LAMBDA(const int &p, const int &k, const int &j, const int &i) {
@@ -707,7 +703,7 @@ TaskStatus KBoundaries::FixFlux(MeshData<Real> *md)
             // If we should replace fluxes with excised versions...
             if (params.Get<bool>("excise_flux_" + bname)) {
                 // ...and if this face of the block corresponds to a global boundary...
-                if (pmb->boundary_flag[bface] == BoundaryFlag::user) {
+                if (IsPhysicalBoundary(pmb, bface)) {
                     if (bdir != 2) throw std::runtime_error("Excised polar fluxes only fully implemented in X2!");
 
                     // Pack w/B to match indices with the `Flux.X` below
@@ -896,7 +892,7 @@ void KBoundaries::AddSource(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDoma
             // If we should replace fluxes with excised versions...
             if (params.Get<bool>("excise_flux_" + bname)) {
                 // ...and if this face of the block corresponds to a global boundary...
-                if (pmb->boundary_flag[bface] == BoundaryFlag::user) {
+                if (IsPhysicalBoundary(pmb, bface)) {
                     if (bdir != 2) throw std::runtime_error("Excised polar fluxes only fully implemented in X2!");
 
                     const IndexRange3 bi = KDomain::GetRange(rc, IndexDomain::interior);

@@ -186,6 +186,10 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
 
     const auto& G = pmb->coords;
 
+    // No floors/floors_inner distinction, TODO?
+    const Real rhoh_denom_max = SQR(inverter_floors.gamma_max) *
+                                m::sqrt(1 - 1 / SQR(inverter_floors.gamma_max));
+
     // Get the primitives from our conserved versions
     // Notice by default, we recover variables for only the physical (interior or interior-ghost)
     // zones!  These are the only ones which are filled at our point in the step
@@ -196,25 +200,131 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
             int pflagl = Inverter::u_to_p<inverter>(G, U, m_u, gam, k, j, i, P, m_p, Loci::center,
                                                     iter_max, err_tol, false);
 
-            // Apply floors immediately, attempting to correct bad inversions
+            // Apply floors immediately, attempting to correct bad values
+            // from either failed or "successful" inversions
             if (apply_floors_with_inversion) {
                 Real rhoflr_max, uflr_max;
-                int fflagl = 0; // Could read fflag here to preserve prior floors but there better not be any
+                int fflagl = 0; // There are no prior floors, reset
                 if (normal_frame_floors) {
                     fflagl |= Floors::determine_floors(G, P, m_p, gam, k, j, i, inverter_floors, inverter_floors_inner,
                         rhoflr_max, uflr_max);
                 } else {
-                    // Bare minimum floors for numerics, before applying the rest in user-selected frame
+                    // Bare minimum floors for numerics, then we apply the rest in user-selected frame
                     rhoflr_max = inverter_floors.rho_min_const;
                     uflr_max = inverter_floors.u_min_const;
                     if (P(m_p.RHO, k, j, i) < rhoflr_max) fflagl |= Floors::FFlag::GEOM_RHO;
                     if (P(m_p.UU, k, j, i) < uflr_max) fflagl |= Floors::FFlag::GEOM_U;
                 }
                 if (fflagl) {
-                    // Apply floors to P -- this calls inversion again
-                    pflagl = Floors::apply_floors<Floors::InjectionFrame::normal_kastaun>(G, P, m_p, gam, k, j, i,
-                            rhoflr_max, uflr_max, U, m_u);
-                    apply_ceilings(G, P, m_p, gam, k, j, i, inverter_floors, inverter_floors_inner, U, m_u);
+                    // Add a floor to density which controls wayward velocities
+                    bool used_rho_to_slow = false;
+                    if (inverter_floors.use_rho_to_slow) {
+                        //const Real rho = std::max(P(m_p.RHO, k, j, i), rhoflr_max);
+                        //const Real u = std::max(P(m_p.UU, k, j, i), uflr_max);
+                        const Real rho = P(m_p.RHO, k, j, i);
+                        const Real u = P(m_p.UU, k, j, i);
+                        const Real rhoh = rho + gam * u;
+                        const Real alpha  = 1. / m::sqrt(-G.gcon(Loci::center, j, i, 0, 0));
+                        const Real a_over_g = alpha / G.gdet(Loci::center, j, i);
+                        Real Scov[3] = {U(m_u.U1, k, j, i) * a_over_g,
+                                        U(m_u.U2, k, j, i) * a_over_g,
+                                        U(m_u.U3, k, j, i) * a_over_g};
+                        Real Scon[3];
+                        Real gupper[GR_DIM][GR_DIM], glower[GR_DIM][GR_DIM];
+                        G.gcon(Loci::center, j, i, gupper);
+                        G.gcov(Loci::center, j, i, glower);
+                        Scon[0] = ((gupper[1][1] - gupper[0][1]*gupper[0][1]/gupper[0][0])*Scov[0] +
+                                    (gupper[1][2] - gupper[0][1]*gupper[0][2]/gupper[0][0])*Scov[1] +
+                                    (gupper[1][3] - gupper[0][1]*gupper[0][3]/gupper[0][0])*Scov[2]);
+
+                        Scon[1] = ((gupper[2][1] - gupper[0][2]*gupper[0][1]/gupper[0][0])*Scov[0] +
+                                    (gupper[2][2] - gupper[0][2]*gupper[0][2]/gupper[0][0])*Scov[1] +
+                                    (gupper[2][3] - gupper[0][2]*gupper[0][3]/gupper[0][0])*Scov[2]);
+
+                        Scon[2] = ((gupper[3][1] - gupper[0][3]*gupper[0][1]/gupper[0][0])*Scov[0] +
+                                    (gupper[3][2] - gupper[0][3]*gupper[0][2]/gupper[0][0])*Scov[1] +
+                                    (gupper[3][3] - gupper[0][3]*gupper[0][3]/gupper[0][0])*Scov[2]);
+                        Real Ssq = 0.0;
+                        SPACELOOP(ii) Ssq += Scon[ii] * Scov[ii];
+
+                        const Real rhoh_min = m::sqrt(Ssq) / rhoh_denom_max;
+                        if (rhoh < rhoh_min) {
+                            fflagl |= Floors::FFlag::INVERTER_GAMMA;
+                            // Proportional increases to rho,u preserve temperature
+                            // TODO could play with this ratio
+                            P(m_p.RHO, k, j, i) = rho * rhoh_min/rhoh;
+                            P(m_p.UU, k, j, i) = u * rhoh_min/rhoh;
+
+                            Real Bvec[] = {0.0, 0.0, 0.0};
+                            SPACELOOP(ii) Bvec[ii] = P(m_u.B1 + ii, k, j, i) * alpha;
+                            Real BdotS = 0.;
+                            SPACELOOP(ii) BdotS += Bvec[ii] * Scov[ii];
+                            Real Bsq = 0.;
+                            SPACELOOP2(ii, jj) Bsq += glower[ii + 1][jj + 1] * Bvec[ii] * Bvec[jj];
+                            Real Sparsq = BdotS * BdotS / Bsq;
+                            Real Sperpsq = Ssq - Sparsq;
+                            Real Spar[3], Sperp[3];
+                            SPACELOOP(ii) Spar[ii] = BdotS * Bvec[ii] / Bsq;
+                            SPACELOOP(ii) Sperp[ii] = Scon[ii] - Spar[ii];
+
+                            auto func_W = [&] (Real W) {
+                                const Real rhohW2 = rhoh_min * W * W;
+                                return Sparsq / SQR(rhohW2) +
+                                Sperpsq / SQR(rhohW2 + Bsq) +
+                                1. / (W * W) - 1.;
+                            };
+
+                            Real zm = 1.;
+                            Real zp = inverter_floors.gamma_max;
+                            Real z = 0.5*(zm + zp);
+
+                            Real fm = func_W(zm);
+                            Real fp = func_W(zp);
+
+                            bool vel_solve_failed = false;
+                            for (int iter = 0; iter < 30; ++iter) {
+                                z =  (zm*fp - zp*fm) / (fp-fm);  // linear interpolation to point f(z)=0
+                                Real f = func_W(z);
+                                // Quit if convergence reached
+                                if ((m::abs(f) < 1e-8) || (m::abs(zm-zp) < 1e-10)) {
+                                    // Return failure if 
+                                    vel_solve_failed = m::abs(f) > 1e-8;
+                                    break;
+                                }
+                                // assign zm-->zp if root bracketed by [z,zp]
+                                if (f*fp < 0.0) {
+                                    zm = zp;
+                                    fm = fp;
+                                    zp = z;
+                                    fp = f;
+                                } else {  // assign zp-->z if root bracketed by [zm,z]
+                                    fm = 0.5*fm; // 1/2 comes from "Illinois algorithm" to accelerate convergence
+                                    zp = z;
+                                    fp = f;
+                                }
+                            }
+
+                            if (!vel_solve_failed) {
+                                SPACELOOP(ii) P(m_p.U1+ii, k, j, i) = z * (Spar[ii] / (rhoh_min * z * z) +
+                                                                        Sperp[ii] / (rhoh_min * z * z + Bsq));
+                                // Even if Kastaun hit max_iter, we managed to reset everything correctly
+                                pflagl = static_cast<int>(Inverter::Status::success);
+                                used_rho_to_slow = true;
+                            } else {
+                                // This should basically NEVER happen
+                                // Only if the numbers are just floating-point gibberish
+                                pflagl = static_cast<int>(Inverter::Status::bad_velocity);
+                            }
+                        }
+                    }
+
+                    // If we haven't used floors to adjust the velocity, apply them in NOF
+                    if (!used_rho_to_slow) {
+                        // Apply floors to P -- this calls inversion again
+                        pflagl = Floors::apply_floors<Floors::InjectionFrame::normal_kastaun>(G, P, m_p, gam, k, j, i,
+                                rhoflr_max, uflr_max, U, m_u);
+                        apply_ceilings(G, P, m_p, gam, k, j, i, inverter_floors, inverter_floors_inner, U, m_u);
+                    }
                 }
 
                 // If we recovered the velocity, mark we used the gamma ceiling
@@ -230,6 +340,13 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                     P(m_p.U2, k, j, i) = 0.;
                     P(m_p.U3, k, j, i) = 0.;
                     pflagl = static_cast<int>(Inverter::Status::success);
+                }
+                // If we applied floors but we won't fix later, update U
+                if (fflagl && !pflagl) {
+                    // This is explicitly a GRMHD-only function, we don't need to account for
+                    // EMHD here.  Also this is done next anyway in the KHARMA driver,
+                    // but we want to eventually remove that function.
+                    GRMHD::p_to_u(G, P, m_p, gam, k, j, i, U, m_u, Loci::center);
                 }
 
                 fflag(0, k, j, i) = fflagl;

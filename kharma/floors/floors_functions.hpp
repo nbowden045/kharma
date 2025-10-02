@@ -234,7 +234,7 @@ KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::drift>(FLOOR_ONE_ARGS)
     // t-component of drift velocity (refer R17 Eqn B13)
     ucon_dr[0] = 1. / m::sqrt(1. / (Dtmp.ucon[0]*Dtmp.ucon[0]) + vpar*vpar);
     // spatial components of drift velocity (refer R17 Eqn B11)
-    DLOOP1 ucon_dr[mu] = Dtmp.ucon[mu] * (ucon_dr[0] / Dtmp.ucon[0]) - (vpar * Bcon[mu] * ucon_dr[0] / B_mag);
+    VLOOP ucon_dr[1 + v] = Dtmp.ucon[1 + v] * (ucon_dr[0] / Dtmp.ucon[0]) - (vpar * Bcon[1 + v] * ucon_dr[0] / B_mag);
 
     // Update rho, uu and compute new enthalpy
     P(m_p.RHO, k, j, i) = m::max(rho, rhoflr_max);
@@ -248,7 +248,7 @@ KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::drift>(FLOOR_ONE_ARGS)
 
     // New fluid four velocity (refer R17 Eqns B13 and B11)
     Dtmp.ucon[0] = 1. / m::sqrt(1/(ucon_dr[0]*ucon_dr[0]) - vpar*vpar);
-    DLOOP1 Dtmp.ucon[mu] = ucon_dr[mu] * (Dtmp.ucon[0] / ucon_dr[0]) + (vpar * Bcon[mu] * Dtmp.ucon[0] / B_mag);
+    VLOOP Dtmp.ucon[1 + v] = ucon_dr[1 + v] * (Dtmp.ucon[0] / ucon_dr[0]) + (vpar * Bcon[1 + v] * Dtmp.ucon[0] / B_mag);
     G.lower(Dtmp.ucon, Dtmp.ucov, k, j, i, Loci::center);
 
     // New velocity primitives
