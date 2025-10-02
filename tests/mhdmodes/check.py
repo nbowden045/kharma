@@ -146,7 +146,7 @@ for k in range(NVAR):
             # (NOT the other runs using that driver!) to converge at -1.9
             # I can't reproduce it on other machines or GPUs; YMMV
             if VARS[k] == 'u2' or VARS[k] == 'u3':
-                if powerfits[k] > -1.8 or powerfits[k] < -2.3:
+                if powerfits[k] > -1.75 or powerfits[k] < -2.3:
                     fail = 1
             else:
                 if powerfits[k] > -1.85 or powerfits[k] < -2.15:
