@@ -29,7 +29,7 @@ test_resize () {
                          coordinates/r_out=100 \
                          parthenon/mesh/nx1=100 parthenon/mesh/nx2=50 parthenon/mesh/nx3=50 \
                          parthenon/meshblock/nx1=100 parthenon/meshblock/nx2=25 parthenon/meshblock/nx3=25 \
-                         b_cleanup/abs_tolerance=1e-7 b_cleanup/always_solve=1 parthenon/time/nlim=1 \
+                         b_cleanup/abs_tolerance=1e-9 b_cleanup/always_solve=1 parthenon/time/nlim=1 \
                          parthenon/output0/single_precision_output=false >log_resize_${1}_2.txt 2>&1
 
     # Check divB on the re-meshed output.  Tolerate some divB as we set the tolerance loosely above for speed
