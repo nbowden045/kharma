@@ -30,7 +30,7 @@ set(PARTHENON_ENABLE_HOST_COMM_BUFFERS OFF CACHE BOOL "KHARMA Override")
 set(BUILD_TESTING OFF CACHE BOOL "KHARMA Override")
 set(ENABLE_COMPILER_WARNINGS OFF CACHE BOOL "KHARMA Override")
 # Always use static HDF5
-set(HDF5_USE_STATIC_LIBRARIES ON CACHE BOOL "KHARMA Override")
+set(HDF5_USE_STATIC_LIBRARIES OFF CACHE BOOL "KHARMA Override")
 
 # Kokkos options
 set(Kokkos_ENABLE_CUDA_LAMBDA ON CACHE BOOL "KHARMA Override")
@@ -62,5 +62,11 @@ include_directories(external/variant/include)
 # Our hacked-up version of the Kokkos kernels
 include_directories(external/kokkos-kernels)
 
-# Finally, build KHARMA
+# Build KHARMA
 add_subdirectory(kharma)
+
+# Install scripts and stuff
+# run.sh as 'kharma' w/o suffix (for now?)
+install(PROGRAMS ${CMAKE_CURRENT_SOURCE_DIR}/run.sh TYPE BIN RENAME "kharma")
+# and our utilities, for fun
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bin/ TYPE BIN)
