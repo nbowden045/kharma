@@ -178,11 +178,11 @@ TaskStatus SetBondiImpl(std::shared_ptr<MeshBlockData<Real>>& rc, IndexDomain do
 
             // Note that NaN guards, including these, are ignored (!) under -ffast-math flag.
             // Thus we stay away from initializing at EH where this could happen
-            if(!isnan(rho)) P(m_p.RHO, k, j, i) = rho;
-            if(!isnan(u)) P(m_p.UU, k, j, i) = u;
-            if(!isnan(u_prim[0])) P(m_p.U1, k, j, i) = u_prim[0];
-            if(!isnan(u_prim[1])) P(m_p.U2, k, j, i) = u_prim[1];
-            if(!isnan(u_prim[2])) P(m_p.U3, k, j, i) = u_prim[2];
+            if(!m::isnan(rho)) P(m_p.RHO, k, j, i) = rho;
+            if(!m::isnan(u)) P(m_p.UU, k, j, i) = u;
+            if(!m::isnan(u_prim[0])) P(m_p.U1, k, j, i) = u_prim[0];
+            if(!m::isnan(u_prim[1])) P(m_p.U2, k, j, i) = u_prim[1];
+            if(!m::isnan(u_prim[2])) P(m_p.U3, k, j, i) = u_prim[2];
         }
     );
 

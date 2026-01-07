@@ -29,13 +29,14 @@ set(PARTHENON_ENABLE_HOST_COMM_BUFFERS OFF CACHE BOOL "KHARMA Override")
 # Parthenon internal build options
 set(BUILD_TESTING OFF CACHE BOOL "KHARMA Override")
 set(ENABLE_COMPILER_WARNINGS OFF CACHE BOOL "KHARMA Override")
-# Always use static HDF5
+# Don't require static HDF5, as conda and other environments don't provide it
 set(HDF5_USE_STATIC_LIBRARIES OFF CACHE BOOL "KHARMA Override")
 
 # Kokkos options
 set(Kokkos_ENABLE_CUDA_LAMBDA ON CACHE BOOL "KHARMA Override")
 set(Kokkos_ENABLE_CUDA_CONSTEXPR ON CACHE BOOL "KHARMA Override")
-set(Kokkos_ENABLE_HWLOC OFF CACHE BOOL "KHARMA Override") # Possible speed improvement?
+# Set ON for possible speed improvement?
+set(Kokkos_ENABLE_HWLOC OFF CACHE BOOL "KHARMA Override")
 set(Kokkos_ENABLE_AGGRESSIVE_VECTORIZATION ON CACHE BOOL "KHARMA Override")
 
 # For including the current git revision in the exe
