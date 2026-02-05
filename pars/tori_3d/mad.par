@@ -62,10 +62,18 @@ inner_x2 = reflecting
 outer_x2 = reflecting
 
 <floors>
-# Minimal floors, applied in the default Normal Observer frame
+# Minimal floors, leveraging inversion recovery.
+# Normal frame is now the only supported injection frame --
+# material added is so minimal that drag effects are negligible
+frame = normal
 rho_min_geom = 1e-6
 u_min_geom   = 1e-8
-gamma_max    = 32
+# Enable to preserve momentum in all cases at the cost of much more
+# density injection
+use_rho_to_slow = false
+# Note there is a hard cap on Lorentz factor at 50 in the source code,
+# but in practice simulations do not reproduce fast enough gamma for
+# this to matter
 
 <fofc>
 # FOFC is disabled by default because of tests but recommended

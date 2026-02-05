@@ -68,7 +68,8 @@ std::shared_ptr<KHARMAPackage> Floors::Initialize(ParameterInput *pin, std::shar
     std::string frame_s = pin->GetOrAddString("floors", "frame", "normal", allowed_floor_frames);
     InjectionFrame frame;
     if (frame_s == "normal") {
-        if (pin->GetOrAddString("inverter", "type", "kastaun") == "onedw") {
+        if (pin->DoesBlockExist("inverter") &&
+            pin->GetOrAddString("inverter", "type", "kastaun") == "onedw") {
             frame = InjectionFrame::normal_onedw;
         } else {
             // Use Kastaun unless we specified onedw inverter
@@ -84,6 +85,19 @@ std::shared_ptr<KHARMAPackage> Floors::Initialize(ParameterInput *pin, std::shar
         frame = InjectionFrame::drift;
     }
     params.Add("frame", frame);
+
+    // New inverter w/recovery only supports normal frame floors. Yell about it, but allow overriding
+    if (pin->DoesBlockExist("inverter") &&
+        pin->GetString("inverter", "type") == "kastaun" &&
+        frame != InjectionFrame::normal_kastaun) {
+        if (!pin->GetOrAddBoolean("floors", "allow_unsafe", false)) {
+            std::cout << "With version 2025.10, KHARMA dramatically changed how floors are applied.\n"
+                      << "The resulting algorithm is much more stable, but requires that floors be applied in the normal observer frame.\n"
+                      << "Consider using the <floors> parameters from pars/tori_3d/mad.par.\n"
+                      << "If you know what you're doing, set floors/allow_unsafe=true";
+            throw std::runtime_error("Unsafe floors requested without override");
+        }
+    }
 
     // Switch points for "mixed" frames
     // TODO no-ops under new floors

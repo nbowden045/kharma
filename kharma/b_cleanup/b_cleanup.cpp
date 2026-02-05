@@ -53,7 +53,8 @@
 std::shared_ptr<KHARMAPackage> B_Cleanup::Initialize(ParameterInput *pin, std::shared_ptr<Packages_t>& packages)
 {throw std::runtime_error("KHARMA was compiled without global solvers!  Cannot clean B Field!");}
 // We still need a stub for CleanupDivergence() in order to compile, but it will never be called
-void B_Cleanup::CleanupDivergence(std::shared_ptr<MeshData<Real>>& md) {}
+TaskStatus B_Cleanup::CleanupDivergence(std::shared_ptr<MeshData<Real>>& md) {}
+bool B_Cleanup::CleanupThisStep(Mesh* pmesh, int nstep) {}
 
 #else
 

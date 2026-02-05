@@ -179,7 +179,7 @@ elif [[ "$ARGS" == *"cuda"* ]]; then
   export NVCC_WRAPPER_DEFAULT_COMPILER="$CXX_NATIVE"
   OUTER_LAYOUT="MANUAL1D_LOOP"
   INNER_LAYOUT="TVR_INNER_LOOP"
-  ENABLE_OPENMP="ON"
+  ENABLE_OPENMP="OFF"
   ENABLE_CUDA="ON"
   ENABLE_SYCL="OFF"
   ENABLE_HIP="OFF"
@@ -273,10 +273,11 @@ if [[ "$ARGS" == *"hdf5"* && "$ARGS" == *"clean"* && "$ARGS" != *"dryrun"* ]]; t
   make clean >> build-hdf5.log 2>&1
   cd ../..
 
-  echo Built HDF5
+  echo Built HDF5 version $H5VER
 fi
 if [[ "$ARGS" == *"hdf5"* ]]; then
   PREFIX_PATH="$SOURCE_DIR/external/hdf5;$PREFIX_PATH"
+  EXTRA_FLAGS="$EXTRA_FLAGS -DHDF5_USE_STATIC_LIBRARIES=ON"
 fi
 
 ### Build KHARMA ###

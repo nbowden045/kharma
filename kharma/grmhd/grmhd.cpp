@@ -554,7 +554,7 @@ void CancelBoundaryU3(MeshBlockData<Real> *rc, IndexDomain domain, bool coarse)
             Kokkos::Sum<Real> sum_reducer(U3_sum);
             parthenon::par_reduce_inner(member, bi.ks, bi.ke,
                 [&](const int& k, Real& local_result) {
-                    local_result += isnan(P(m_p.U3, k, jf, i)) ? 0. : P(m_p.U3, k, jf, i);
+                    local_result += m::isnan(P(m_p.U3, k, jf, i)) ? 0. : P(m_p.U3, k, jf, i);
                 }
             , sum_reducer);
             member.team_barrier();
@@ -628,7 +628,7 @@ void CancelBoundaryT3(MeshBlockData<Real> *rc, IndexDomain domain, bool coarse)
             Kokkos::Sum<Real> sum_reducer(T3_sum);
             parthenon::par_reduce_inner(member, bi.ks, bi.ke,
                 [&](const int& k, Real& local_result) {
-                    local_result += isnan(U(m_u.U3, k, jf, i)) ? 0. : U(m_u.U3, k, jf, i);
+                    local_result += m::isnan(U(m_u.U3, k, jf, i)) ? 0. : U(m_u.U3, k, jf, i);
                 }
             , sum_reducer);
             member.team_barrier();
