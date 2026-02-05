@@ -67,7 +67,6 @@ outer_x2 = reflecting
 # Minimal floors, applied in the default Normal Observer frame
 rho_min_geom = 1e-6
 u_min_geom   = 1e-8
-gamma_max    = 32
 
 <fofc>
 # FOFC is disabled by default because of tests but recommended
