@@ -273,10 +273,11 @@ if [[ "$ARGS" == *"hdf5"* && "$ARGS" == *"clean"* && "$ARGS" != *"dryrun"* ]]; t
   make clean >> build-hdf5.log 2>&1
   cd ../..
 
-  echo Built HDF5
+  echo Built HDF5 version $H5VER
 fi
 if [[ "$ARGS" == *"hdf5"* ]]; then
   PREFIX_PATH="$SOURCE_DIR/external/hdf5;$PREFIX_PATH"
+  EXTRA_FLAGS="$EXTRA_FLAGS -DHDF5_USE_STATIC_LIBRARIES=ON"
 fi
 
 ### Build KHARMA ###
