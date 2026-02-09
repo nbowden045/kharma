@@ -229,7 +229,8 @@ std::shared_ptr<KHARMAPackage> Initialize(ParameterInput *pin, std::shared_ptr<P
             hst_vars.emplace_back(parthenon::HistoryOutputVar(UserHistoryOperation::sum, Reductions::SumAt5M<Reductions::Var::ldot>, "Ldot_5M"));
         }
 
-        if (do_all || KHARMA::FieldIsOutput(pin, "eh_fluxes_flux")) {
+        // Add event-horizon fluxes by default as a check
+        if (true || do_all || KHARMA::FieldIsOutput(pin, "eh_fluxes_flux")) {
             hst_vars.emplace_back(parthenon::HistoryOutputVar(UserHistoryOperation::sum, Reductions::SumAt0<Reductions::Var::mdot_flux>, "Mdot_Flux"));
             hst_vars.emplace_back(parthenon::HistoryOutputVar(UserHistoryOperation::sum, Reductions::SumAtEH<Reductions::Var::mdot_flux>, "Mdot_EH_Flux"));
             hst_vars.emplace_back(parthenon::HistoryOutputVar(UserHistoryOperation::sum, Reductions::SumAt5M<Reductions::Var::mdot_flux>, "Mdot_5M_Flux"));
