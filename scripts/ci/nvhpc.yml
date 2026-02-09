@@ -4,7 +4,7 @@
 # Build on Nvidia image.
 # Can pretty easily change this out, with changes to build
 # Someday we'll build & push a KHARMA image, then test that
-image: nvcr.io/nvidia/nvhpc:24.5-devel-cuda12.4-rockylinux9
+image: nvcr.io/nvidia/nvhpc:26.1-devel-cuda13.1-rockylinux9
 
 variables:
   OMP_NUM_THREADS: 8
