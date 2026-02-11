@@ -43,6 +43,7 @@
 #include "grmhd.hpp"
 #include "inverter.hpp"
 #include "ismr.hpp"
+#include "radM1.hpp"
 #include "wind.hpp"
 // Other headers
 #include "boundaries.hpp"
