@@ -54,11 +54,11 @@ TaskStatus AddSource(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDomain doma
 * This function will calculate the radiation four-force G_nu.
 * For now this solely serves as a test.
 */
-// KOKKOS_INLINE_FUNCTION void calc_Gnu(const Real& G0, const Real& G1, const Real& G2, const Real& G3,Real Gnu_lower[GR_DIM]) 
-// {
-//     Gnu_lower[0] = G0;
-//     Gnu_lower[1] = G1;
-//     Gnu_lower[2] = G2;
-//     Gnu_lower[3] = G3;
-// };
+KOKKOS_INLINE_FUNCTION void calc_Gnu(const Real& G0, const Real& G1, const Real& G2, const Real& G3,Real Gnu_lower[GR_DIM]) 
+{
+    Gnu_lower[0] = G0;
+    Gnu_lower[1] = G1;
+    Gnu_lower[2] = G2;
+    Gnu_lower[3] = G3;
+}
 }
