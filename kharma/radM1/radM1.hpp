@@ -69,4 +69,18 @@ KOKKOS_INLINE_FUNCTION Real calc_lambda(Real T) {
     const Real sigma_SB = 5.67e-5; // Stefan-Boltzmann constant probably defined somewhere! (ASK BEN) (CGS)
     return (sigma_SB * T * T * T * T) / M_PI;
 }
+
+
+KOKKOS_INLINE_FUNCTION void initialize_radiation_pressure(Real UU, Real * UU_rad) {
+    //Here we assume that Pgas + Prad = Ptot
+    //This translates to rho * T + 1/3 a_rad * T^4 - Ptot = 0
+    //The derivative gives us rho + 4/3 a_rad * T^3 = 0, which we can use to find the root of the equation and solve for T given rho and Ptot. 
+    // This should be done if we're simulating high accretion rates, bnecause then we should not start with a low radiation pressure, but for all purposes
+    // we are gonna assume here that the radiation pressure is negligible at the start of the simulation, so we can just set it to a small value.
+
+    // radiation pressure is 0.1% of the gas pressure at the start of the simulation.
+    *UU_rad = UU * 0.001;
+
+    return;
+}
 }

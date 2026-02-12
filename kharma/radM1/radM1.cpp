@@ -172,8 +172,6 @@ TaskStatus RadM1::AddSource(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDoma
                                      U(b, m_u.U2_RAD, k, j, i)/gdet, 
                                      U(b, m_u.U3_RAD, k, j, i)/gdet}; 
 
-            //printf("R_t_cov: %e, %e, %e, %e\n", R_t_cov[0], R_t_cov[1], R_t_cov[2], R_t_cov[3]);
-
             // This is R^{t\mu}
             Real R_t_con[GR_DIM];
             G.raise(R_t_cov, R_t_con, k, j, i, Loci::center);
@@ -186,13 +184,16 @@ TaskStatus RadM1::AddSource(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDoma
                 }
             }
 
+
             // Isolaring u^t_R^2 in Equation 33 to find u^t_R in Equation 32 from Sadowski et al. 2013.
             // It gives g^{tt}\bar{E}^2 - 2 R^{tt} \bar{E} - 3 invariant_scalar = 0
             // It yields the solution \bar{E} = R^{tt} +- sqrt((R^{tt})^2 + 3 g^tt invariant_scalar) / g^{tt}
             // We are gonna take the negative root since g^{tt} is negative and we want \bar{E} to be positive.
             Real g_con_tt = G.gcon(Loci::center, j, i, 0, 0);
             Real E_bar = (R_t_con[0] - m::sqrt(R_t_con[0]*R_t_con[0] + 3.0 * g_con_tt * invariant_scalar)) / g_con_tt;
-
+            if(isnan(E_bar)){
+                printf("R_tcon[0]: %e, g_con_tt: %e, invariant_scalar: %e\n", R_t_con[0], g_con_tt, invariant_scalar);
+            }
             //Floor applied in Mckinney et al 2013? (ASK BEN ABOUT FLOORS)
             if(E_bar < 1e-150){
                 E_bar = 1e-150;
@@ -200,7 +201,6 @@ TaskStatus RadM1::AddSource(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDoma
 
             //then u^t_R = sqrt(1/8 g^{tt} - 9/(8 E_bar^2) * invariant_scalar)
             Real u_R_t = m::sqrt(0.125 * g_con_tt - 1.125/(E_bar * E_bar) * invariant_scalar);
-
             // Now calculate the other components of u_R^\mu using Equation 27 from Sadowski et al. 2013, which goes as 
             // R^{\mu\nu} = 4/3 \bar{E} u_R^\mu u_R^\nu + 1/3 \bar{E} g^{\mu\nu}
             // I do have R^{t\mu} and R^{tt}, so I can rearrange the equation to find u_R^\mu as follows:
@@ -286,8 +286,6 @@ TaskStatus RadM1::AddSource(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDoma
                 }
             }
 
-            printf("G_cov: %e, %e, %e, %e\n", G_cov[0], G_cov[1], G_cov[2], G_cov[3]);
-            printf("G_con: %e, %e, %e, %e\n", G_con[0], G_con[1], G_con[2], G_con[3]);
             
             // FLUID
             // dUdt(b, m_u.UU, k, j, i) += gdet * G_cov[0];

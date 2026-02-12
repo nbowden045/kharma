@@ -38,6 +38,8 @@
 #include "coordinate_utils.hpp"
 #include "types.hpp"
 
+#include "radM1.hpp"
+
 TaskStatus InitializeFMTorus(std::shared_ptr<MeshBlockData<Real>>& rc, ParameterInput *pin)
 {
     auto pmb        = rc->GetBlockPointer();
@@ -201,6 +203,10 @@ TaskStatus InitializeFMTorus(std::shared_ptr<MeshBlockData<Real>>& rc, Parameter
         KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
             rho(k, j, i) /= rho_max;
             u(k, j, i) /= rho_max;
+
+            if(use_rad){
+                RadM1::initialize_radiation_pressure(u(k,j,i), &uu_rad(k,j,i));
+            }
         }
     );
 
