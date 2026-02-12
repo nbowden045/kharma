@@ -34,7 +34,7 @@ integrator = vl2
 <debug>
 verbose = 1
 extra_checks = 1
-flag_verbose = 1
+flag_verbose = 0
 
 <GRMHD>
 cfl = 0.9
@@ -42,13 +42,7 @@ gamma = 1.666667
 reconstruction = weno5
 
 <radM1>
-# This adds a small source term of hot material,
-# ideally preventing floor hits in the funnel
 on = true
-ne = 1.e-4
-Tp = 100
-u1 = 0.4
-power = 40
 
 <b_field>
 solver = flux_ct

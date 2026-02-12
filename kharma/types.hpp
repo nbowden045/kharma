@@ -135,6 +135,9 @@ class VarMap {
         // Implicit-solver variables: constraint damping, EGRMHD
         int8_t PSI, Q, DP;
         // Total struct size ~20 bytes, < 1 vector of 4 doubles
+        int8_t UU_RAD, U1_RAD, U2_RAD, U3_RAD;
+        // RAD_M1 variables
+        
 
         VarMap(parthenon::PackIndexMap& name_map, bool is_cons)
         {
@@ -161,6 +164,9 @@ class VarMap {
                 // Extended MHD
                 Q = name_map["cons.q"].first;
                 DP = name_map["cons.dP"].first;
+                // RAD_M1
+                UU_RAD = name_map["cons.u_rad"].first;
+                U1_RAD = name_map["cons.uvec_rad"].first;
             } else {
                 // HD
                 RHO = name_map["prims.rho"].first;
@@ -184,6 +190,9 @@ class VarMap {
                 // Extended MHD
                 Q = name_map["prims.q"].first;
                 DP = name_map["prims.dP"].first;
+                // RAD_M1
+                UU_RAD = name_map["prims.u_rad"].first;
+                U1_RAD = name_map["prims.uvec_rad"].first;
             }
             if (U1 >= 0) {
                 U2 = U1 + 1;
@@ -206,6 +215,15 @@ class VarMap {
                 Bf2 = -1;
                 Bf3 = -1;
             }
+
+            // if U1_RAD is present, we assume the rest of the RAD_M1 variables are too.  If not, we assume none of them are.
+            if (U1_RAD >= 0) {
+                U2_RAD = U1_RAD + 1;
+                U3_RAD = U1_RAD + 2;
+            } else {
+                U2_RAD = -1;
+                U3_RAD = -1;
+            }
         }
 
         void print() const
@@ -214,13 +232,15 @@ class VarMap {
             printf("prims: %d %d %d %d %d\n", RHO, UU, U1, U2, U3);
             printf("B field cell: %d %d %d face: %d %d %d\n", B1, B2, B3, Bf1, Bf2, Bf3);
             printf("EMHD q: %d dP: %d\n", Q, DP);
+            printf("RAD_M1: %d %d %d %d\n", UU_RAD, U1_RAD, U2_RAD, U3_RAD);
         }
 };
 
 // Reasonable maximum number of fluid primitive or conserved variables being evolved
 // e.g. 8 for GRMHD, 10 for EMHD, and additional vars for e-/passives
+// Added + 4 for RAD_M1 variables
 // TODO(BSP) make configurable.  Currently only used for implicit kernel temporaries
-#define MAX_VARS 20
+#define MAX_VARS 24
 
 #if DEBUG
 /**

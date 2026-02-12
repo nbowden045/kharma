@@ -68,6 +68,17 @@ TaskStatus InitializeFMTorus(std::shared_ptr<MeshBlockData<Real>>& rc, Parameter
     // Fishbone-Moncrief parameters
     Real l = lfish_calc(a, rmax);
 
+    //RadM1 initialization alongside torus. 
+    // I think this can be moved to RadM1::Initialize, but for now it's easier to just have it here since we need the plasma four-velocity.
+    // especially since we want to test the radiation with other problems, and we should be able to initialize it without the torus solution.
+    const bool use_rad = pmb->packages.AllPackages().count("RadM1");
+    GridScalar uu_rad;
+    GridVector uvec_rad;
+    if(use_rad){
+        uu_rad = rc->Get("prims.u_rad").data;
+        uvec_rad = rc->Get("prims.uvec_rad").data;
+    }
+    
     pmb->par_for("fm_torus_init", ks, ke, js, je, is, ie,
         KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
             GReal Xnative[GR_DIM], Xembed[GR_DIM], Xmidplane[GR_DIM];
@@ -123,6 +134,12 @@ TaskStatus InitializeFMTorus(std::shared_ptr<MeshBlockData<Real>>& rc, Parameter
                 uvec(0, k, j, i) = u_prim[0];
                 uvec(1, k, j, i) = u_prim[1];
                 uvec(2, k, j, i) = u_prim[2];
+                if(use_rad){
+                    uu_rad(k, j, i) = 0;
+                    uvec_rad(0, k, j, i) = 0;
+                    uvec_rad(1, k, j, i) = 0;
+                    uvec_rad(2, k, j, i) = 0;
+                }
             }
         }
     );
