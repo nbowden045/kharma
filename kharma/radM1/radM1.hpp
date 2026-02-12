@@ -65,7 +65,7 @@ KOKKOS_INLINE_FUNCTION Real calc_kscattering(Real rho, Real T) {
 }
 
 // Planck function for blackbody radiation
-KOKKOS_INLINE_FUNCTION Real calc_B(Real T) {
+KOKKOS_INLINE_FUNCTION Real calc_lambda(Real T) {
     const Real sigma_SB = 5.67e-5; // Stefan-Boltzmann constant probably defined somewhere! (ASK BEN) (CGS)
     return (sigma_SB * T * T * T * T) / M_PI;
 }
