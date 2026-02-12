@@ -51,14 +51,22 @@ TaskStatus AddSource(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDomain doma
 
 
 /*
-* This function will calculate the radiation four-force G_nu.
-* For now this solely serves as a test.
+* These are just place holders to calculate G^\nu following Eq.16 Mckinney et al 2014.
+* Should check if it should be G^\nu or G_\nu (ASK BEN).
 */
-KOKKOS_INLINE_FUNCTION void calc_Gnu(const Real& G0, const Real& G1, const Real& G2, const Real& G3,Real Gnu_lower[GR_DIM]) 
-{
-    Gnu_lower[0] = G0;
-    Gnu_lower[1] = G1;
-    Gnu_lower[2] = G2;
-    Gnu_lower[3] = G3;
+
+KOKKOS_INLINE_FUNCTION Real calc_kabs(Real rho, Real T) {
+    return 1.0; 
+}
+
+// Scattering Opacity (kappa_s)
+KOKKOS_INLINE_FUNCTION Real calc_kscattering(Real rho, Real T) {
+    return 0.4;
+}
+
+// Planck function for blackbody radiation
+KOKKOS_INLINE_FUNCTION Real calc_B(Real T) {
+    const Real sigma_SB = 5.67e-5; // Stefan-Boltzmann constant probably defined somewhere! (ASK BEN) (CGS)
+    return (sigma_SB * T * T * T * T) / M_PI;
 }
 }
