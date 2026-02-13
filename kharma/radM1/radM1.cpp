@@ -37,6 +37,12 @@
 
 std::shared_ptr<KHARMAPackage> RadM1::Initialize(ParameterInput *pin, std::shared_ptr<Packages_t>& packages)
 {
+    // Check if the Units package is initialized, since we need it for the radiation four-force calculations.
+    if (packages->Get("Units") != nullptr) {
+        printf("\033[1;31mError: Units package must be initialized when using RadM1 package.\033[0m\n");
+        exit(1);
+    }
+
     auto pkg = std::make_shared<KHARMAPackage>("RadM1");
     Params &params = pkg->AllParams();
 
@@ -286,7 +292,7 @@ TaskStatus RadM1::AddSource(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDoma
                 }
             }
 
-            
+            printf("G_cov: %e, %e, %e, %e\n", G_cov[0], G_cov[1], G_cov[2], G_cov[3]);
             // FLUID
             // dUdt(b, m_u.UU, k, j, i) += gdet * G_cov[0];
             // dUdt(b, m_u.U1, k, j, i) += gdet * G_cov[1];

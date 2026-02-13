@@ -44,6 +44,10 @@ reconstruction = weno5
 <radM1>
 on = true
 
+<units> 
+MBH = 100
+rho_scale = 1e-4
+
 <b_field>
 solver = flux_ct
 

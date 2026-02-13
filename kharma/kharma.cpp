@@ -57,6 +57,10 @@
 #include "grmhd.hpp"
 #include "reductions.hpp"
 #include "emhd.hpp"
+
+// Out of the package modification units.
+#include "units.hpp"
+// Out of the package modification RADM1.
 #include "radM1.hpp"
 #include "wind.hpp"
 
@@ -426,6 +430,13 @@ Packages_t KHARMA::ProcessPackages(std::unique_ptr<ParameterInput> &pin)
     if (pin->GetOrAddBoolean("wind", "on", false)) {
         auto t_wind = tl.AddTask(t_grmhd, KHARMA::AddPackage, packages, Wind::Initialize, pin.get());
     }
+
+     //Enable radiation package. Out of the package modification units.
+    if (pin->GetOrAddBoolean("units", "on", false)) {
+        auto t_units = tl.AddTask(t_grmhd, KHARMA::AddPackage, packages, Units::Initialize, pin.get());
+    }
+
+    //Enable radiation package. Out of the package modification RADM1.
     if (pin->GetOrAddBoolean("radM1", "on", false)) {
         auto t_radM1 = tl.AddTask(t_grmhd, KHARMA::AddPackage, packages, RadM1::Initialize, pin.get());
     }

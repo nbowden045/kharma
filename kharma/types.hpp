@@ -136,7 +136,7 @@ class VarMap {
         int8_t PSI, Q, DP;
         // Total struct size ~20 bytes, < 1 vector of 4 doubles
         int8_t UU_RAD, U1_RAD, U2_RAD, U3_RAD;
-        // RAD_M1 variables
+        // RAD_M1 variables. Out of the package modification RADM1.
         
 
         VarMap(parthenon::PackIndexMap& name_map, bool is_cons)
@@ -164,7 +164,7 @@ class VarMap {
                 // Extended MHD
                 Q = name_map["cons.q"].first;
                 DP = name_map["cons.dP"].first;
-                // RAD_M1
+                // RAD_M1. Out of the package modification RADM1.
                 UU_RAD = name_map["cons.u_rad"].first;
                 U1_RAD = name_map["cons.uvec_rad"].first;
             } else {
@@ -190,7 +190,7 @@ class VarMap {
                 // Extended MHD
                 Q = name_map["prims.q"].first;
                 DP = name_map["prims.dP"].first;
-                // RAD_M1
+                // RAD_M1. Out of the package modification RADM1.
                 UU_RAD = name_map["prims.u_rad"].first;
                 U1_RAD = name_map["prims.uvec_rad"].first;
             }
@@ -216,7 +216,7 @@ class VarMap {
                 Bf3 = -1;
             }
 
-            // if U1_RAD is present, we assume the rest of the RAD_M1 variables are too.  If not, we assume none of them are.
+            // if U1_RAD is present, we assume the rest of the RAD_M1 variables are too.  If not, we assume none of them are. Out of the package modification RADM1.
             if (U1_RAD >= 0) {
                 U2_RAD = U1_RAD + 1;
                 U3_RAD = U1_RAD + 2;
