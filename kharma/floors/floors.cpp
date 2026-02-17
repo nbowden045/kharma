@@ -161,6 +161,12 @@ TaskStatus Floors::ApplyInitialFloors(ParameterInput *pin, MeshBlockData<Real> *
 
     const Real gam = pmb->packages.Get("GRMHD")->Param<Real>("gamma");
 
+    // Out of the package modification RADM1.
+    // I don't think we need an Apply Initial Floors function for radM1. I'm applying it in the fluid frame as well as it is done with the gas.
+    // For now, I'm applying the same floors to the radiation variables as the fluid variables, but we can adjust this as needed.
+    // The floor is only being applied to UU_RAD.
+    const bool use_rad = pmb->packages.AllPackages().count("RadM1");
+
     // If we're going to apply floors through the run, apply the same ones at init
     // Otherwise stick to specified/default geometric floors
     Floors::Prescription floors_tmp;
@@ -197,6 +203,12 @@ TaskStatus Floors::ApplyInitialFloors(ParameterInput *pin, MeshBlockData<Real> *
             int fflag = determine_floors(G, P, m_p, gam, k, j, i, floors, floors, rhoflr_max, uflr_max);
             if (fflag) {
                 apply_floors<InjectionFrame::fluid>(G, P, m_p, gam, k, j, i, rhoflr_max, uflr_max, U, m_u);
+
+                // Out of the package modification RADM1.
+                if(use_rad){
+                    apply_floors_radM1<InjectionFrame::fluid>(G, P, m_p, gam, k, j, i, rhoflr_max, uflr_max, U, m_u);
+                }
+                
                 apply_ceilings(G, P, m_p, gam, k, j, i, floors, floors, U, m_u);
                 // P->U for any modified zones
                 Flux::p_to_u_mhd(G, P, m_p, emhd_params, gam, k, j, i, U, m_u, Loci::center);

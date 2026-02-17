@@ -184,6 +184,7 @@ KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::fluid>(FLOOR_ONE_ARGS)
     return 0;
 }
 
+
 template<>
 KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::drift>(FLOOR_ONE_ARGS)
 {
@@ -317,6 +318,22 @@ KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::normal_kastaun>(FLOOR_ON
     // Recover new primitive variables.  Use Kastaun with safe parameters so we don't fail often
     return Inverter::u_to_p<Inverter::Type::kastaun>(G, U, m_u, gam, k, j, i, P, m_p, Loci::center,
                                                      25, 1e-12, true);
+}
+
+
+/**
+ * Out of the package modification RADM1.
+ * Template for setting floors to RADM1 variables. 
+ * For now we only have the initial floors for the radiation energy field variable.
+ */
+template<InjectionFrame frame>
+KOKKOS_INLINE_FUNCTION int apply_floors_radM1(FLOOR_ONE_ARGS);
+
+template<>
+KOKKOS_INLINE_FUNCTION int apply_floors_radM1<InjectionFrame::fluid>(FLOOR_ONE_ARGS)
+{
+    P(m_p.UU_RAD, k, j, i)  += m::max(0., uflr_max - P(m_p.UU_RAD, k, j, i));
+    return 0;
 }
 
 /**

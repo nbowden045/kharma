@@ -225,7 +225,6 @@ class VarMap {
                 U3_RAD = -1;
             }
         }
-
         void print() const
         {
             printf("VAR MAP:\n");

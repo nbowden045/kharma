@@ -37,7 +37,12 @@
 
 
 namespace Units {
-
+    
+inline Real M_BH = 1.0;
+inline Real rho_scale = 1.0;
+inline Real L_unit = 1.0;
+inline Real T_unit = 1.0;
+inline Real U_unit = 1.0;
 // Constants in CGS units.
 constexpr Real Gnewt_cgs = 6.67430e-8;
 constexpr Real clight_cgs = 2.99792458e10;
@@ -54,25 +59,29 @@ inline std::shared_ptr<KHARMAPackage> Initialize(ParameterInput *pin, std::share
 
     // Read parameters from par file 
     // It defaults to 10 solar masses, but it should be always set in the par file.
-    Real M_BH = pin->GetOrAddReal("units", "M_BH", 10.0);
-    Real rho_scale = pin->GetOrAddReal("units", "density_scale", 1e-6);
+    M_BH = pin->GetOrAddReal("units", "M_BH", 10.0); 
+    rho_scale = pin->GetOrAddReal("units", "rho_scale", 1e-6);
     // TODO: instead of having a rho_scale parameter
     // We could have a mdot parameter, if we knew the standard accretion rate a normal SANE and MAD initialization would produce.
     // Then we could calculate the rho_scale from the desired mdot.
 
     Real M_BH_CGS = M_BH * msun_cgs;
-    Real L_unit   = (Gnewt_cgs * M_BH_CGS) / (clight_cgs * clight_cgs); // GM/c^2
-    Real T_unit   = L_unit / clight_cgs;                       // GM/c^3
-    Real U_unit   = rho_scale * clight_cgs * clight_cgs;            // rho * c^2 (Energy Density)
+    L_unit   = (Gnewt_cgs * M_BH_CGS) / (clight_cgs * clight_cgs); // GM/c^2
+    T_unit   = L_unit / clight_cgs;                       // GM/c^3
+    U_unit   = rho_scale * clight_cgs * clight_cgs;            // rho * c^2 (Energy Density)
 
     // 4. Store them in the package parameters so other packages (like RadM1) can find them
     params.Add("M_BH", M_BH); // Store in Solar Masses
-    params.Add("density_scale", rho_scale);
+    params.Add("rho_scale", rho_scale);
     
     // Store Derived CGS units
     params.Add("length_unit_cgs", L_unit);
     params.Add("time_unit_cgs", T_unit);
     params.Add("energy_unit_cgs", U_unit);
+
+    // Print an output of all the scales
+    printf("Units initialized with M_BH = %e Msun, rho_scale = %e g/cm^3\n", M_BH, rho_scale);
+    printf("Derived units: length_unit = %e cm, time_unit = %e s, energy_unit = %e erg/cm^3\n", L_unit, T_unit, U_unit);
 
     return pkg;
 }

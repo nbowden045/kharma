@@ -33,13 +33,15 @@
  */
 #include "radM1.hpp"
 #include "kharma_driver.hpp"
-
+#include "units.hpp"
 
 std::shared_ptr<KHARMAPackage> RadM1::Initialize(ParameterInput *pin, std::shared_ptr<Packages_t>& packages)
 {
+    bool units_enabled = pin->GetOrAddBoolean("units", "on", false);
+
     // Check if the Units package is initialized, since we need it for the radiation four-force calculations.
-    if (packages->Get("Units") != nullptr) {
-        printf("\033[1;31mError: Units package must be initialized when using RadM1 package.\033[0m\n");
+    if (!units_enabled) {
+        printf("\033[1;31mError: Units package not enabled! It must be enabled with/BEFORE RadM1.\033[0m\n");
         exit(1);
     }
 
@@ -101,14 +103,13 @@ std::shared_ptr<KHARMAPackage> RadM1::Initialize(ParameterInput *pin, std::share
     auto m_cons_scalar = Metadata(flags_cons);
     pkg->AddField("cons.u_rad", m_cons_scalar);
 
-    auto flags_prim_vec = flags_prim;
+    auto flags_prim_vec(flags_prim);
     flags_prim_vec.push_back(Metadata::Vector);
 
-    auto flags_cons_vec = flags_cons;
+    auto flags_cons_vec(flags_cons);
     flags_cons_vec.push_back(Metadata::Vector);
 
     std::vector<int> s_vector({NVEC});
-
     auto m_prim_vector = Metadata(flags_prim_vec, s_vector);
     pkg->AddField("prims.uvec_rad", m_prim_vector);
 
@@ -197,16 +198,13 @@ TaskStatus RadM1::AddSource(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDoma
             // We are gonna take the negative root since g^{tt} is negative and we want \bar{E} to be positive.
             Real g_con_tt = G.gcon(Loci::center, j, i, 0, 0);
             Real E_bar = (R_t_con[0] - m::sqrt(R_t_con[0]*R_t_con[0] + 3.0 * g_con_tt * invariant_scalar)) / g_con_tt;
-            if(isnan(E_bar)){
-                printf("R_tcon[0]: %e, g_con_tt: %e, invariant_scalar: %e\n", R_t_con[0], g_con_tt, invariant_scalar);
-            }
-            //Floor applied in Mckinney et al 2013? (ASK BEN ABOUT FLOORS)
-            if(E_bar < 1e-150){
-                E_bar = 1e-150;
-            }
-
+            
             //then u^t_R = sqrt(1/8 g^{tt} - 9/(8 E_bar^2) * invariant_scalar)
             Real u_R_t = m::sqrt(0.125 * g_con_tt - 1.125/(E_bar * E_bar) * invariant_scalar);
+
+            // check if any of the values are nan, if so, apply floor to both
+            if(!isfinite(E_bar)) E_bar = 1e-30;
+            if(!isfinite(u_R_t)) u_R_t = 1e-30;
             // Now calculate the other components of u_R^\mu using Equation 27 from Sadowski et al. 2013, which goes as 
             // R^{\mu\nu} = 4/3 \bar{E} u_R^\mu u_R^\nu + 1/3 \bar{E} g^{\mu\nu}
             // I do have R^{t\mu} and R^{tt}, so I can rearrange the equation to find u_R^\mu as follows:
@@ -216,9 +214,9 @@ TaskStatus RadM1::AddSource(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDoma
                 u_R_con[nu] = (R_t_con[nu] - (E_bar / 3.0) * G.gcon(Loci::center, j, i, 0, nu)) / ((4.0/3.0) * E_bar * u_R_t);
             }
 
+
             // Now calculating the other terms of R^\mu\nu using the same equation
-            // However, we don't need to calculate R^ij, since we have R^tt and R^ti
-             
+            // However, we don't need to calculate R^ij, since we have R^tt and R^ti 
             Real R_uu[GR_DIM - 1][GR_DIM - 1]; // R^ij
             for(int mu=0; mu<GR_DIM-1; ++mu) {
                 for(int nu=0; nu<GR_DIM-1; ++nu) {
@@ -226,17 +224,22 @@ TaskStatus RadM1::AddSource(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDoma
                 }
             } 
 
+            Real R_uu_complete[GR_DIM][GR_DIM] = {
+                {R_t_con[0], R_t_con[1], R_t_con[2], R_t_con[3]},
+                {R_t_con[1], R_uu[0][0], R_uu[0][1], R_uu[0][2]},
+                {R_t_con[2], R_uu[1][0], R_uu[1][1], R_uu[1][2]},
+                {R_t_con[3], R_uu[2][0], R_uu[2][1], R_uu[2][2]}
+            };
+
             // Calculate the mixed index R^\mu_\nu
-            Real R_mixed[GR_DIM][GR_DIM]; 
+            Real R_mixed[GR_DIM][GR_DIM] = {0.0}; 
             for(int mu=0; mu<GR_DIM; ++mu) {
                 for(int nu=0; nu<GR_DIM; ++nu) {
-                    R_mixed[mu][nu] = 0.0;
                     for(int sigma=0; sigma<GR_DIM; ++sigma) {
-                        R_mixed[mu][nu] += G.gcov(Loci::center, j, i, mu, sigma) * ((sigma == 0) ? R_t_con[nu] : R_uu[sigma-1][nu-1]);
+                        R_mixed[mu][nu] +=  R_uu_complete[mu][sigma] * G.gcov(Loci::center, j, i, sigma, nu);
                     }
                 }
             }
-            
 
 
             // Here we'll need to calculate Kabs depending on the physical processes involved in the radiation field
@@ -258,42 +261,41 @@ TaskStatus RadM1::AddSource(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDoma
             G.lower(ucon, ucov, k, j, i, Loci::center);
 
             // Calculating the scattering term
-            Real scattering_term[GR_DIM] = {0};
-            for(int mu=0; mu<GR_DIM; ++mu) {
-                for(int alpha=0; alpha<GR_DIM; ++alpha) {
-                    for (int beta=0; beta<GR_DIM; ++beta) {
-                        scattering_term[mu] += R_mixed[mu][alpha] * ucov[alpha] + R_mixed[alpha][beta] * ucov[alpha] * ucov[beta] * ucon[mu];
-                    }
+
+            Real Ruu_scalar = 0.0;
+            for(int alpha=0; alpha<GR_DIM; ++alpha) {
+                for(int beta=0; beta<GR_DIM; ++beta) {
+                    Ruu_scalar += R_mixed[alpha][beta] * ucov[alpha] * ucon[beta];
                 }
-                scattering_term[mu] *= - kappa_s;
             }
-            // Calculating the absorption term
-            Real absorption_term[GR_DIM] = {0};
+
+            Real G_con[GR_DIM] = {0.0};
+
             for(int mu=0; mu<GR_DIM; ++mu) {
+                //Calculate the vector projection V^mu = R^mu_nu * u^nu
+                Real Ru_vec = 0.0;
                 for(int nu=0; nu<GR_DIM; ++nu) {
-                    absorption_term[mu] += kappa_a * R_mixed[mu][nu] * ucon[nu] + lambda * ucon[mu];
+                    Ru_vec += R_mixed[mu][nu] * ucon[nu];
                 }
-                absorption_term[mu] *= -1;
-            }
-
-            Real G_con[GR_DIM]; // G^\nu
-
-            for (int mu=0; mu<GR_DIM; ++mu) {
-                G_con[mu] = absorption_term[mu] + scattering_term[mu];
+                // Absorption Term: G_abs = -kappa_a * ( V^mu + lambda * u^mu )
+                Real force_abs = -kappa_a * (Ru_vec) + lambda * ucon[mu];
+                //Scattering Term: G_scat = -kappa_s * ( V^mu + S * u^mu )
+                Real force_scatt = -kappa_s * (Ru_vec + Ruu_scalar * ucon[mu]);
+                // Combine
+                G_con[mu] = force_abs + force_scatt;
             }
        
             // I think we need to lower the index here? (ASK BEN)
             Real G_cov[GR_DIM];
 
-            
-            for(int nu=0; nu<4; ++nu) {
-                for(int mu=0; mu<4; ++mu) {
-                    G_cov[nu] += G.gcov(Loci::center, j, i, nu, mu) * G_con[mu];
-                }
-            }
+            G.lower(G_con, G_cov, k, j, i, Loci::center);
+            //printf("G_cov: %e %e %e %e\n", G_cov[0], G_cov[1], G_cov[2], G_cov[3]);
+            // G_cov[0]  = 1e-8;
+            // G_cov[1]  = 1e-8;
+            // G_cov[2]  = 1e-8;
+            // G_cov[3]  = 1e-8;
 
-            printf("G_cov: %e, %e, %e, %e\n", G_cov[0], G_cov[1], G_cov[2], G_cov[3]);
-            // FLUID
+            // // FLUID
             // dUdt(b, m_u.UU, k, j, i) += gdet * G_cov[0];
             // dUdt(b, m_u.U1, k, j, i) += gdet * G_cov[1];
             // dUdt(b, m_u.U2, k, j, i) += gdet * G_cov[2];

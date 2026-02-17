@@ -72,6 +72,22 @@ KOKKOS_INLINE_FUNCTION Real calc_lambda(Real T) {
 }
 
 
+// It will calculate the lab frame radiation tensor following
+// Equation $$R^{\mu\nu} = \frac{4}{3}E_{rf}u^\mu_{rf}u^\nu_{rf} + \frac{1}{3}E_{rf}g^{\mu\nu}$$
+KOKKOS_INLINE_FUNCTION void calc_tensor(const Real& rho, const Real& u, const Real& pgas,
+                                            const FourVectors& D, const int dir,
+                                            Real mhd[GR_DIM])
+{
+    const Real bsq = dot(D.bcon, D.bcov);
+    const Real eta = pgas + rho + u + bsq;
+    const Real ptot = pgas + 0.5 * bsq;
+
+    DLOOP1 {
+        mhd[mu] = eta * D.ucon[dir] * D.ucov[mu] +
+                  ptot * (dir == mu) -
+                  D.bcon[dir] * D.bcov[mu];
+    }
+}
 KOKKOS_INLINE_FUNCTION void initialize_radiation_pressure(Real UU, Real * UU_rad) {
     //Here we assume that Pgas + Prad = Ptot
     //This translates to rho * T + 1/3 a_rad * T^4 - Ptot = 0

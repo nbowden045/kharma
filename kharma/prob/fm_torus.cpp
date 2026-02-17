@@ -137,7 +137,7 @@ TaskStatus InitializeFMTorus(std::shared_ptr<MeshBlockData<Real>>& rc, Parameter
                 uvec(1, k, j, i) = u_prim[1];
                 uvec(2, k, j, i) = u_prim[2];
                 if(use_rad){
-                    uu_rad(k, j, i) = 0;
+                    uu_rad(k, j, i) = 0.0;
                     uvec_rad(0, k, j, i) = u_prim[0];
                     uvec_rad(1, k, j, i) = u_prim[1];
                     uvec_rad(2, k, j, i) = u_prim[2];

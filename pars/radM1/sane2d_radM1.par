@@ -1,10 +1,11 @@
-# SANE model in 2D
-# Overall simulation size 50M, to allow
-# running at small scale on e.g. a laptop
-# Uses MKS coordinates, not Funky variant
+# SANE ("Standard and Normal Evolution" i.e. not Magnetically Arrested).
+# Similar to "v5" library parameters w/adiabatic index 5/3,
+# and a larger disk (rin=10/rmax=20)
+
 
 <parthenon/job>
 problem_id = torus
+archive_parameters = timestamp
 
 <parthenon/mesh>
 nx1 = 128
@@ -19,66 +20,79 @@ nx3 = 1
 <coordinates>
 base = spherical_ks
 transform = fmks
-r_out = 50
+r_out = 1000
 a = 0.9375
 hslope = 0.3
-mks_smooth = 0.5
-poly_xt = 0.82
-poly_alpha = 14.0
+correct_connections = true
 
 <parthenon/time>
-tlim = 3000.0
+tlim = 60000.0
 nlim = -1
-integrator = vl2
-
-<debug>
-verbose = 1
-extra_checks = 1
-flag_verbose = 0
-
-<GRMHD>
-cfl = 0.9
-gamma = 1.666667
-reconstruction = weno5
-
-<radM1>
-on = true
-
-<units> 
-MBH = 100
-rho_scale = 1e-4
-
-<b_field>
-solver = flux_ct
-
-<driver>
-type = kharma
 
 <torus>
-rin = 6.0
-rmax = 12.0
+rin = 10.0
+rmax = 20.0
+# Tilt in degrees. YMMV.
+tilt = 0.
 
 <perturbation>
 u_jitter = 0.04
 
 <b_field>
+solver = face_ct
 type = sane
 beta_min = 100.
 
+<GRMHD>
+cfl = 0.7
+gamma = 1.666667
+
+<flux>
+type = llf
+# WENO5 Adaptive Order "At Home" --
+# WENO5Z with fallback to linear recon in difficult regions
+reconstruction = weno5_linear
+
+<driver>
+type = kharma
+# Second sync at the end of each step
+# Can skip this with the robust inverter & face_ct B fields
+two_sync = false
+
+<boundaries>
+inner_x2 = reflecting
+outer_x2 = reflecting
+
 <floors>
-rho_min_geom = 1e-5
-u_min_geom = 1e-7
-u_over_rho_max = 100
-bsq_over_rho_max = 100
+# Minimal floors, applied in the default Normal Observer frame
+rho_min_geom = 1e-6
+u_min_geom   = 1e-8
+gamma_max    = 32
+
+<fofc>
+# FOFC is disabled by default because of tests but recommended
+# for most production runs
+on = true
+
+
+<radM1>
+on = true
+
+<units> 
+on = true
+M_BH = 100
+rho_scale = 1e-4
+
+<debug>
+verbose = 1
+extra_checks = 2
+flag_verbose = 0
 
 <parthenon/output0>
 file_type = hdf5
-dt = 10.0
+dt = 0.0
 single_precision_output = true
-# Fields beginning with a specifier here will be included (e.g., all prims.XXX)
-# Fields specified but not present are silently skipped
-# If you need a line break, use '&' at line end
-variables = prims, jcon, pflag, fflag
+variables = prims, divB, jcon, fflag, pflag, fofcflag
 
 <parthenon/output1>
 file_type = rst
@@ -87,18 +101,3 @@ dt = 100.0
 <parthenon/output2>
 file_type = hst
 dt = 0.1
-variables = all_reductions
-
-# This outputs a geometry file, similar to iharm3d's old 'grid.h5'
-# Not needed for pyharm analysis in Kerr metrics, but useful in
-# a bunch of other contexts.
-<parthenon/output3>
-file_type = hdf5
-analysis_output = true
-dt = 1e20
-single_precision_output = false
-# If you want the convenience and hate disk space, you can add these
-# variables to "normal" dump files like output0 too.
-variables = coords.Xnative, coords.Xsph, &
-            coords.gcon, coords.gcov, coords.gdet, coords.lapse, coords.conn, &
-            coords.gcon_embed, coords.gcov_embed, coords.gdet_embed
