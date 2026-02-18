@@ -10,6 +10,7 @@ then
 
   # Generally we want the Cray comipiler/environment,
   # for better device-side MPI support
+  module reset
   if [[ $ARGS == *"cray"* ]]; then
     module swap PrgEnv-gnu PrgEnv-cray
   fi
@@ -29,7 +30,7 @@ then
     fi
   else
     # CPU Compile (TODO test)
-    module load modtree/cpu gcc
+    #module load modtree/cpu gcc
     MPI_NUM_PROCS=1
   fi
 fi
