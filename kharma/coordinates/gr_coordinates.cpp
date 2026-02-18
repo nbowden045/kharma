@@ -253,69 +253,62 @@ void init_GRCoordinates(GRCoordinates& G) {
 
     //Out of the package modification RADM1.
     //Here we follow Mckinney et al. (2012) to correct the connection coefficients: https://ui.adsabs.harvard.edu/abs/2012MNRAS.423.3083M/abstract
+    // Probably a better way to make this more efficient.
     if (correct_connections) {
         Kokkos::parallel_for("geom_corrections", MDRangePolicy<Rank<2>>({0,0}, {n2, n1}),
             KOKKOS_LAMBDA (const int& j, const int& i) {
-                // In the two directions the grid changes, make sure that we *exactly*
-                // satisfy the req't gdet*conn^mu_mu_nu = d_nu gdet, when evaluated on faces
-                // This will make the source term exactly balance the flux differences,
-                // crucial near the poles
                 GReal X[GR_DIM];
                 G.coord(0, j, i, Loci::center, X);
-                if (1) { //(m::abs(X[2] - 0) < 0.08 || m::abs(X[2] - 1.0) < 0.08)) {
-                    for (int lam=1; lam < GR_DIM; lam++) {
-                        const Loci loc = loc_of(lam);
-                        // Get gdet values at faces we calculated above
-                        GReal Xfm[GR_DIM], Xfp[GR_DIM];
-                        G.coord(0, j, i, loc, Xfm);
-                        G.coord(0, j + (lam == X2DIR), i + (lam == X1DIR), loc, Xfp);
-                        double gdetfm = gdet_local(loc, j, i);
-                        double gdetfp = gdet_local(loc, j + (lam == X2DIR), i + (lam == X1DIR));
+                for (int lam=1; lam < GR_DIM; lam++) {
+                    const Loci loc = loc_of(lam);
+                    // Get gdet values at faces we calculated above
+                    GReal Xfm[GR_DIM], Xfp[GR_DIM];
+                    G.coord(0, j, i, loc, Xfm);
+                    G.coord(0, j + (lam == X2DIR), i + (lam == X1DIR), loc, Xfp);
+                    double gdetfm = gdet_local(loc, j, i);
+                    double gdetfp = gdet_local(loc, j + (lam == X2DIR), i + (lam == X1DIR));
 
 
-                        // Get cell center metric determinant
-                        double gdet_c = gdet_local(Loci::center, j, i);
+                    // Get cell center metric determinant
+                    double gdet_c = gdet_local(Loci::center, j, i);
 
-                        GReal D_k = (gdetfp - gdetfm) / ((Xfp[lam] - Xfm[lam] + SMALL) * gdet_c);
+                    GReal D_k = (gdetfp - gdetfm) / ((Xfp[lam] - Xfm[lam] + SMALL) * gdet_c);
 
-                        // Then sum the coefficients and record nonzero ones for modification
-                        GReal C_k = 0;
-                        GReal S_k = 1e-300;
-                        DLOOP1 {
-                            GReal Gam_local = gdet_conn_local(j, i, mu, mu, lam) / gdet_c;
-                            
-                            C_k += Gam_local;
-                            S_k += m::abs(Gam_local);
-                            
-                        }
+                    // Then sum the coefficients and record nonzero ones for modification
+                    GReal C_k = 0;
+                    GReal S_k = 1e-300;
+                    DLOOP1 {
+                        GReal Gam_local = gdet_conn_local(j, i, mu, mu, lam) / gdet_c;
+                        
+                        C_k += Gam_local;
+                        S_k += m::abs(Gam_local);
+                        
+                    }
 
-                        GReal dS_k = D_k - C_k;
+                    GReal dS_k = D_k - C_k;
 
-                        DLOOP1 {
-                            // Re-calculate local Gamma value
-                            GReal Gam_val = gdet_conn_local(j, i, mu, mu, lam) / gdet_c;
-                            
-                            // Calculate weight
-                            GReal W_kmu = m::abs(Gam_val) / S_k;
-                            
-                            // Calculate correction for Gamma
-                            GReal Delta_Gamma = dS_k * W_kmu;
-                            
-                            // Apply to storage (multiply by gdet_c because we store gdet*Gamma)
-                            GReal correction_term = Delta_Gamma * gdet_c;
+                    DLOOP1 {
+                        // Re-calculate local Gamma value
+                        GReal Gam_val = gdet_conn_local(j, i, mu, mu, lam) / gdet_c;
+                        
+                        // Calculate weight
+                        GReal W_kmu = m::abs(Gam_val) / S_k;
+                        
+                        // Calculate correction for Gamma
+                        GReal Delta_Gamma = dS_k * W_kmu;
+                        
+                        // Apply to storage (multiply by gdet_c because we store gdet*Gamma)
+                        GReal correction_term = Delta_Gamma * gdet_c;
 
-                            printf("Zone %d %d, lam %d, D_k: %.3e, C_k: %.3e, dS_k: %.3e, Gam_val: %.3e, W_kmu: %.3e, correction: %.3e\n", i, j, lam, D_k, C_k, dS_k, Gam_val, W_kmu, correction_term);
-                            gdet_conn_local(j, i, mu, mu, lam) += correction_term;
+                        gdet_conn_local(j, i, mu, mu, lam) += correction_term;
 
-                            // Enforce symmetry of Christoffel symbols: Gamma^mu_lam_nu = Gamma^mu_nu_lam
-                            // We correct Gamma^mu_mu_lam and Gamma^mu_lam_mu identicaly
-                            gdet_conn_local(j, i, mu, lam, mu) = gdet_conn_local(j, i, mu, mu, lam);
-                        }
+                        // Enforce symmetry of Christoffel symbols: Gamma^mu_lam_nu = Gamma^mu_nu_lam
+                        // We correct Gamma^mu_mu_lam and Gamma^mu_lam_mu identicaly
+                        gdet_conn_local(j, i, mu, lam, mu) = gdet_conn_local(j, i, mu, mu, lam);
                     }
                 }
             }
         );
     }
-
 }
 #endif // FAST_CARTESIAN

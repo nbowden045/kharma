@@ -39,6 +39,9 @@
 #include "grmhd.hpp"
 #include "kharma.hpp"
 
+// Out of the package modification RADM1.
+#include "radM1.hpp"
+
 using namespace parthenon;
 
 // GetFlux is in the header file get_flux.hpp, as it is templated on reconstruction scheme and flux direction
@@ -167,6 +170,12 @@ std::shared_ptr<KHARMAPackage> Flux::Initialize(ParameterInput *pin, std::shared
     m = Metadata(flags_speed, s_vector);
     pkg->AddField("Flux.cmax", m);
     pkg->AddField("Flux.cmin", m);
+
+    // Out of the package modification RADM1.
+    if(packages->AllPackages().count("RadM1")) {
+        pkg->AddField("Flux.cmax_rad", m);
+        pkg->AddField("Flux.cmin_rad", m);
+    }
 
     // PROCESS FOFC
     // Accept this a bunch of places, maybe we'll trim this...
@@ -398,6 +407,7 @@ TaskStatus Flux::BlockPtoU_Send(MeshBlockData<Real> *rc, IndexDomain domain, boo
     return TaskStatus::complete;
 }
 
+
 void Flux::AddGeoSource(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDomain domain)
 {
     // Pointers
@@ -407,6 +417,9 @@ void Flux::AddGeoSource(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDomain d
     // Options
     const auto& pars = pkgs.Get("GRMHD")->AllParams();
     const Real gam   = pars.Get<Real>("gamma");
+
+    //Out of the package modification RADM1.
+    const bool use_rad = pmb0->packages.AllPackages().count("RadM1");
 
     // All connection coefficients are zero in Cartesian Minkowski space
     // TODO do we know this fully in init?
@@ -430,11 +443,33 @@ void Flux::AddGeoSource(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDomain d
             const auto& G = dUdt.GetCoords(b);
             FourVectors D;
             GRMHD::calc_4vecs(G, P(b), m_p, k, j, i, Loci::center, D);
+
+            //Out of the package modification RADM1.
+            FourVectors D_rad;
+            if(use_rad) {
+                RadM1::calc_4vecs(G, P(b), m_p, k, j, i, Loci::center, D_rad);
+            }
+        
             // Call Flux::calc_tensor which will in turn call the right calc_tensor based on the number of primitives
             Real Tmu[GR_DIM]    = {0};
             Real new_du[GR_DIM] = {0};
+            
+            //Out of the package modification RADM1.
+            Real Rmu[GR_DIM] = {0};
+            Real new_du_rad[GR_DIM] = {0};
             for (int mu = 0; mu < GR_DIM; ++mu) {
                 Flux::calc_tensor(P(b), m_p, D, emhd_params, gam, k, j, i, mu, Tmu);
+                
+                //Out of the package modification RADM1.
+                if(use_rad) {
+                    GReal UU_rad = P(b, m_p.UU_RAD, k, j, i);
+                    RadM1::calc_tensor(UU_rad, D_rad, mu, Rmu);
+                    for (int nu = 0; nu < GR_DIM; ++nu) {
+                        for (int lam = 0; lam < GR_DIM; ++lam) {
+                            new_du_rad[nu] += Rmu[nu] * G.gdet_conn(j, i, nu, lam, mu); // Contract Rmu with connection, and multiply by metric determinant~.
+                        }
+                    }
+                }
                 for (int nu = 0; nu < GR_DIM; ++nu) {
                     // Contract mhd stress tensor with connection, and multiply by metric determinant
                     for (int lam = 0; lam < GR_DIM; ++lam) {
@@ -445,6 +480,12 @@ void Flux::AddGeoSource(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDomain d
 
             dUdt(b, m_u.UU, k, j, i)           += new_du[0];
             VLOOP dUdt(b, m_u.U1 + v, k, j, i) += new_du[1 + v];
+            
+            //Out of the package modification RADM1.
+            if(use_rad) {
+                dUdt(b, m_u.UU_RAD, k, j, i)           += new_du_rad[0];
+                VLOOP dUdt(b, m_u.U1_RAD + v, k, j, i) += new_du_rad[1 + v];
+            }
         }
     );
 }

@@ -305,14 +305,22 @@ Real EstimateTimestep(MeshData<Real> *md)
     // TODO version preserving location, with switch to keep this fast one
     // TODO maybe split normal vs ISMR (/Excised pole/etc) timesteps? Make normal calculation mesh-wise?
     double min_ndt = std::numeric_limits<double>::max();
+
     for (auto &pmb : pmesh->block_list) {
         auto rc = pmb->meshblock_data.Get(md->StageName()).get();
         // We only need this block-wise to check boundary flags for ISMR, could special-case that
         const bool is_inner_x2 = KBoundaries::IsPhysicalBoundary(pmb, BoundaryFace::inner_x2);
         const bool is_outer_x2 = KBoundaries::IsPhysicalBoundary(pmb, BoundaryFace::outer_x2);
 
-        const auto& cmax  = rc->PackVariables(std::vector<std::string>{"Flux.cmax"});
-        const auto& cmin  = rc->PackVariables(std::vector<std::string>{"Flux.cmin"});
+        const auto& cmax_mhd  = rc->PackVariables(std::vector<std::string>{"Flux.cmax"});
+        const auto& cmin_mhd  = rc->PackVariables(std::vector<std::string>{"Flux.cmin"});
+
+        // Out of the Package modification RADM1.
+        // If radiation package is present, use radiation cmax and cmin for timestep calculation instead of MHD cmax and cmin
+        const bool use_rad = pmesh->packages.AllPackages().count("RadM1");
+        const auto& cmax = (use_rad) ? rc->PackVariables(std::vector<std::string>{"Flux.cmax_rad"}) : cmax_mhd;
+        const auto& cmin = (use_rad) ? rc->PackVariables(std::vector<std::string>{"Flux.cmin_rad"}) : cmin_mhd;
+        
 
         auto& boundaries = pmesh->packages.Get<KHARMAPackage>("Boundaries")->AllParams();
         const bool excise_inner_x2 = boundaries.Get<bool>("excise_flux_inner_x2");
