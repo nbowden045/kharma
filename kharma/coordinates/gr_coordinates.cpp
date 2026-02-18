@@ -225,7 +225,8 @@ void init_GRCoordinates(GRCoordinates& G) {
 
                         // Then sum the coefficients and record nonzero ones for modification
                         GReal test_sum = 0;
-                        GReal sum_portions, portions[GR_DIM] = {0};
+                        GReal sum_portions = 0;
+                        GReal portions[GR_DIM] = {0};
                         DLOOP1 {
                             test_sum += gdet_conn_local(j, i, mu, mu, lam);
                             portions[mu] = m::abs(gdet_conn_local(j, i, mu, mu, lam));
