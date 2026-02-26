@@ -117,13 +117,23 @@ std::shared_ptr<KHARMAPackage> RadM1::Initialize(ParameterInput *pin, std::share
 
     // New Ratio Parameters (matching your legacy code)
     // Default values are placeholders; you should set reasonable defaults or require them in input.
-    pkg->AllParams().Add("rad_rho_min", pin->GetOrAddReal("RadM1", "rad_rho_min", 1.e-20));
-    pkg->AllParams().Add("rad_rho_max", pin->GetOrAddReal("RadM1", "rad_rho_max", 1.e20));
-    pkg->AllParams().Add("rad_u_min", pin->GetOrAddReal("RadM1", "rad_u_min", 1.e-20));
-    pkg->AllParams().Add("rad_u_max", pin->GetOrAddReal("RadM1", "rad_u_max", 1.e20));
+    pkg->AllParams().Add("rad_rho_min", pin->GetOrAddReal("radM1", "rad_rho_min", 1.e-20));
+    pkg->AllParams().Add("rad_rho_max", pin->GetOrAddReal("radM1", "rad_rho_max", 1.e20));
+    pkg->AllParams().Add("rad_u_min", pin->GetOrAddReal("radM1", "rad_u_min", 1.e-20));
+    pkg->AllParams().Add("rad_u_max", pin->GetOrAddReal("radM1", "rad_u_max", 1.e20));
+
+    // Print all the parameters
+    if (MPIRank0()){
+        printf("RadM1 floor Parameters:\n");
+        printf("u_rad_floor: %e\n", u_rad_floor);
+        printf("rad_rho_min: %e\n", params.Get<Real>("rad_rho_min"));
+        printf("rad_rho_max: %e\n", params.Get<Real>("rad_rho_max"));
+        printf("rad_u_min: %e\n", params.Get<Real>("rad_u_min"));
+        printf("rad_u_max: %e\n", params.Get<Real>("rad_u_max"));
+    }
 
     // Magnetic ratio (if needed)
-    pkg->AllParams().Add("rad_b_max", pin->GetOrAddReal("RadM1", "rad_b_max", 100.0));
+    pkg->AllParams().Add("rad_b_max", pin->GetOrAddReal("radM1", "rad_b_max", 100.0));
     
     //Right now, to execute the torus problem with radM1, we need to initialize the radiation primitives in fm_torus.cpp (this is stupid) (ASK BEN)
     //I think this should be moved to RadM1 method, maybe call an initialization method like a task straight after initializing the torus?
@@ -189,11 +199,11 @@ void RadM1::ApplyRadM1Floors(MeshBlockData<Real> *rc, IndexDomain domain)
             }
 
             // Radiation dominates mass too much
-            // if (ehat > erad_rho_max * rho) {
-            //     // Boost Density -> modifying fluid var from Rad package? I'm blindly following Korals floors checks, should talk to ben
-            //     // P(m_p.RHO, k, j, i) = ehat / erad_rho_max;
-            //     P(m_p.UU_RAD, k, j, i) = erad_rho_max * rho;
-            // }
+            if (ehat > erad_rho_max * rho) {
+                // Boost Density -> modifying fluid var from Rad package? I'm blindly following Korals floors checks, should talk to ben
+                // P(m_p.RHO, k, j, i) = ehat / erad_rho_max;
+                P(m_p.UU_RAD, k, j, i) = erad_rho_max * rho;
+            }
 
             //Radiation vs Internal Energy
             Real u_gas = P(m_p.UU, k, j, i);
