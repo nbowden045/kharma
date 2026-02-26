@@ -60,6 +60,10 @@ TaskStatus AddSource(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDomain doma
  */
 TaskStatus BlockUtoP(MeshBlockData<Real> *rc, IndexDomain domain, bool coarse=false);
 
+/**
+ * Apply floors to the radiation energy variables. 
+ */
+void ApplyRadM1Floors(MeshBlockData<Real> *rc, IndexDomain domain);
 /*
 * These are just place holders to calculate G^\nu following Eq.16 Mckinney et al 2014.
 * Should check if it should be G^\nu or G_\nu (ASK BEN).
@@ -98,13 +102,28 @@ KOKKOS_INLINE_FUNCTION void calc_4vecs(const GRCoordinates& G, const VariablePac
 }
 
 
+// Calculate radiation four velocity in the lab frame, with Local variables
+template <typename Local>
+KOKKOS_INLINE_FUNCTION void calc_4vecs(const GRCoordinates& G, const Local& P, const VarMap& m, const int& j, const int& i, const Loci loc, FourVectors& D_rad)
+{
+    const Real gamma = GRMHD::lorentz_calc(G, P, m, j, i, loc);
+    const Real alpha = 1. / m::sqrt(-G.gcon(loc, j, i, 0, 0));
+
+    D_rad.ucon[0] = gamma / alpha;
+    
+    VLOOP D_rad.ucon[v+1] = P(m.U1_RAD + v) - gamma * alpha * G.gcon(loc, j, i, 0, v+1);
+
+    G.lower(D_rad.ucon, D_rad.ucov, 0, j, i, loc);
+}
+
 // It will calculate the lab frame radiation tensor following
 // Equation $$R^{\mu\nu} = \frac{4}{3}E_{rf}u^\mu_{rf}u^\nu_{rf} + \frac{1}{3}E_{rf}g^{\mu\nu}$$
-// First index up, second index down.
-// Possible cause for a bug here, should it be delta func or gmunu?
+// First index up, second index down. 
+// Note that ucon and ucov here are ucon_rad and ucov_rad
 KOKKOS_INLINE_FUNCTION void calc_tensor(const Real& UU_rad, const FourVectors& D, const int dir, Real mhd_rad[GR_DIM])
 {
    DLOOP1 {
+        // mhd_rad[mu] = (4.0/3.0) * UU_rad * D.ucon[dir] * D.ucov[mu] + (1.0/3.0) * UU_rad * (dir == mu ? 1.0 : 0.0);
         mhd_rad[mu] = (4.0/3.0) * UU_rad * D.ucon[dir] * D.ucov[mu] + (1.0/3.0) * UU_rad * (dir == mu ? 1.0 : 0.0);
     }
 }

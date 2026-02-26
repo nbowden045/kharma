@@ -167,7 +167,10 @@ KOKKOS_FORCEINLINE_FUNCTION void prim_to_flux(const GRCoordinates& G, const Loca
         // First calculate the radiation tensor
         Real R[GR_DIM];
         const Real UU_rad = P(m_p.UU_RAD);
-        RadM1::calc_tensor(UU_rad, D, dir, R);
+        //Gotta make sure here that D is D_rad
+        FourVectors D_rad;
+        RadM1::calc_4vecs(G, P, m_p, j, i, loc, D_rad);
+        RadM1::calc_tensor(UU_rad, D_rad, dir, R);
 
         // Then calculate the fluxes
         flux(m_u.UU_RAD) = R[0] * gdet;
@@ -246,7 +249,10 @@ KOKKOS_FORCEINLINE_FUNCTION void prim_to_flux(const GRCoordinates& G, const Glob
         // First calculate the radiation tensor
         Real R[GR_DIM];
         const Real UU_rad = P(m_p.UU_RAD, k, j, i);
-        RadM1::calc_tensor(UU_rad, D, dir, R);
+        //Gotta make sure here that D is D_rad
+        FourVectors D_rad;
+        RadM1::calc_4vecs(G, P, m_p, k, j, i, loc, D_rad);
+        RadM1::calc_tensor(UU_rad, D_rad, dir, R);
 
         // Then calculate the fluxes
         flux[m_u.UU_RAD] = R[0] * gdet;
@@ -325,6 +331,9 @@ KOKKOS_FORCEINLINE_FUNCTION void prim_to_flux(const GRCoordinates& G, const Glob
         // First calculate the radiation tensor
         Real R[GR_DIM];
         const Real UU_rad = P(m_p.UU_RAD, k, j, i);
+        //Gotta make sure here that D is D_rad
+        FourVectors D_rad;
+        GRMHD::calc_4vecs(G, P, m_p, k, j, i, loc, D_rad);
         RadM1::calc_tensor(UU_rad, D, dir, R);
         // Then calculate the fluxes
         flux(m_u.UU_RAD, k, j, i) = R[0] * gdet;

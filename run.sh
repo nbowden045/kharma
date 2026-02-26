@@ -95,7 +95,7 @@ fi
 if [[ "$1" == "-n" ]]; then
   MPI_NUM_PROCS="$2"
   if [[ -z $MPI_EXE && $(( $MPI_NUM_PROCS > 1 )) ]]; then
-    MPI_EXE="mpirun"
+    MPI_EXE="srun"
   fi
   shift
   shift

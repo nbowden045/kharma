@@ -384,72 +384,74 @@ inline TaskStatus GetFlux(MeshData<Real> *md)
     // Apply what we've calculated
     Flag("GetFlux_"+std::to_string(dir)+"_riemann");
 
-    // Define bounds for Radiation variables to check against 'p'
-    // We capture 'use_rad' and 'm_u' in the lambda
-    // Out of the package modification RADM1.
-    const int rad_start = (use_rad) ? m_u.UU_RAD : -1;
-    const int rad_end   = (use_rad) ? m_u.U3_RAD : -2;
 
-    if (use_hlle) { 
-        pmb0->par_for("flux_hlle", block.s, block.e, 0, nvar-1, b.ks, b.ke, b.js, b.je, b.is, b.ie,
-            KOKKOS_LAMBDA(const int& bl, const int& p, const int& k, const int& j, const int& i) {
-                // Default to Fluid Speeds (stored as positive magnitudes)
-                Real cmax_val = cmax(bl, dir-1, k, j, i);
-                Real cmin_val = cmin(bl, dir-1, k, j, i);
 
-                //Override with Radiation Speeds if 'p' is a radiation variable
-                if (use_rad && p >= rad_start && p <= rad_end) {
-                    cmax_val = cmax_rad(bl, dir-1, k, j, i);
-                    cmin_val = cmin_rad(bl, dir-1, k, j, i);
+    if(use_rad){
+        // Define bounds for Radiation variables to check against 'p'
+        // We capture 'use_rad' and 'm_u' in the lambda
+        // Out of the package modification RADM1.
+        const int rad_start = (use_rad) ? m_u.UU_RAD : -1;
+        const int rad_end   = (use_rad) ? m_u.U3_RAD : -2;
+        if (use_hlle) { 
+            pmb0->par_for("flux_hlle", block.s, block.e, 0, nvar-1, b.ks, b.ke, b.js, b.je, b.is, b.ie,
+                KOKKOS_LAMBDA(const int& bl, const int& p, const int& k, const int& j, const int& i) {
+                    // Default to Fluid Speeds (stored as positive magnitudes)
+                    Real cmax_val = cmax(bl, dir-1, k, j, i);
+                    Real cmin_val = cmin(bl, dir-1, k, j, i);
+
+                    //Override with Radiation Speeds if 'p' is a radiation variable
+                    if (use_rad && p >= rad_start && p <= rad_end) {
+                        cmax_val = cmax_rad(bl, dir-1, k, j, i);
+                        cmin_val = cmin_rad(bl, dir-1, k, j, i);
+                    }
+
+                    //Compute Flux
+                    U_all(bl).flux(dir, p, k, j, i) = hlle(Fl_all(bl, p, k, j, i), Fr_all(bl, p, k, j, i),
+                                                        cmax_val, cmin_val,
+                                                        Ul_all(bl, p, k, j, i), Ur_all(bl, p, k, j, i));
                 }
+            );
+        } else {
+            pmb0->par_for("flux_llf", block.s, block.e, 0, nvar-1, b.ks, b.ke, b.js, b.je, b.is, b.ie,
+                KOKKOS_LAMBDA(const int& bl, const int& p, const int& k, const int& j, const int& i) {
+                    //Default to Fluid Speeds
+                    Real cmax_val = cmax(bl, dir-1, k, j, i);
+                    Real cmin_val = cmin(bl, dir-1, k, j, i);
 
-                //Compute Flux
-                U_all(bl).flux(dir, p, k, j, i) = hlle(Fl_all(bl, p, k, j, i), Fr_all(bl, p, k, j, i),
-                                                     cmax_val, cmin_val,
-                                                     Ul_all(bl, p, k, j, i), Ur_all(bl, p, k, j, i));
-            }
-        );
-    } else {
-        pmb0->par_for("flux_llf", block.s, block.e, 0, nvar-1, b.ks, b.ke, b.js, b.je, b.is, b.ie,
-            KOKKOS_LAMBDA(const int& bl, const int& p, const int& k, const int& j, const int& i) {
-                //Default to Fluid Speeds
-                Real cmax_val = cmax(bl, dir-1, k, j, i);
-                Real cmin_val = cmin(bl, dir-1, k, j, i);
+                    //Override with Radiation Speeds
+                    if (use_rad && p >= rad_start && p <= rad_end) {
+                        cmax_val = cmax_rad(bl, dir-1, k, j, i);
+                        cmin_val = cmin_rad(bl, dir-1, k, j, i);
+                    }
 
-                //Override with Radiation Speeds
-                if (use_rad && p >= rad_start && p <= rad_end) {
-                    cmax_val = cmax_rad(bl, dir-1, k, j, i);
-                    cmin_val = cmin_rad(bl, dir-1, k, j, i);
+                    //Compute Flux
+                    U_all(bl).flux(dir, p, k, j, i) = llf(Fl_all(bl, p, k, j, i), Fr_all(bl, p, k, j, i),
+                                                        cmax_val, cmin_val,
+                                                        Ul_all(bl, p, k, j, i), Ur_all(bl, p, k, j, i));
                 }
-
-                //Compute Flux
-                U_all(bl).flux(dir, p, k, j, i) = llf(Fl_all(bl, p, k, j, i), Fr_all(bl, p, k, j, i),
-                                                    cmax_val, cmin_val,
-                                                    Ul_all(bl, p, k, j, i), Ur_all(bl, p, k, j, i));
-            }
-        );
+            );
+        }
+        EndFlag();
+    }else{
+        if (use_hlle) { // More fluxes would need a template
+            pmb0->par_for("flux_hlle", block.s, block.e, 0, nvar-1, b.ks, b.ke, b.js, b.je, b.is, b.ie,
+                KOKKOS_LAMBDA(const int& bl, const int& p, const int& k, const int& j, const int& i) {
+                    U_all(bl).flux(dir, p, k, j, i) = hlle(Fl_all(bl, p, k, j, i), Fr_all(bl, p, k, j, i),
+                                                          cmax(bl, dir-1, k, j, i), cmin(bl, dir-1, k, j, i),
+                                                          Ul_all(bl, p, k, j, i), Ur_all(bl, p, k, j, i));
+                }
+            );
+        } else {
+            pmb0->par_for("flux_llf", block.s, block.e, 0, nvar-1, b.ks, b.ke, b.js, b.je, b.is, b.ie,
+                KOKKOS_LAMBDA(const int& bl, const int& p, const int& k, const int& j, const int& i) {
+                    U_all(bl).flux(dir, p, k, j, i) = llf(Fl_all(bl, p, k, j, i), Fr_all(bl, p, k, j, i),
+                                                         cmax(bl, dir-1, k, j, i), cmin(bl, dir-1, k, j, i),
+                                                         Ul_all(bl, p, k, j, i), Ur_all(bl, p, k, j, i));
+                }
+            );
+        }
+        EndFlag();
     }
-    EndFlag();
-
-    // This was the original way, I'm keeping it here in case it is necessary later
-    // if (use_hlle) { // More fluxes would need a template
-    //     pmb0->par_for("flux_hlle", block.s, block.e, 0, nvar-1, b.ks, b.ke, b.js, b.je, b.is, b.ie,
-    //         KOKKOS_LAMBDA(const int& bl, const int& p, const int& k, const int& j, const int& i) {
-    //             U_all(bl).flux(dir, p, k, j, i) = hlle(Fl_all(bl, p, k, j, i), Fr_all(bl, p, k, j, i),
-    //                                                   cmax(bl, dir-1, k, j, i), cmin(bl, dir-1, k, j, i),
-    //                                                   Ul_all(bl, p, k, j, i), Ur_all(bl, p, k, j, i));
-    //         }
-    //     );
-    // } else {
-    //     pmb0->par_for("flux_llf", block.s, block.e, 0, nvar-1, b.ks, b.ke, b.js, b.je, b.is, b.ie,
-    //         KOKKOS_LAMBDA(const int& bl, const int& p, const int& k, const int& j, const int& i) {
-    //             U_all(bl).flux(dir, p, k, j, i) = llf(Fl_all(bl, p, k, j, i), Fr_all(bl, p, k, j, i),
-    //                                                  cmax(bl, dir-1, k, j, i), cmin(bl, dir-1, k, j, i),
-    //                                                  Ul_all(bl, p, k, j, i), Ur_all(bl, p, k, j, i));
-    //         }
-    //     );
-    // }
-    // EndFlag();
 
     EndFlag();
     return TaskStatus::complete;

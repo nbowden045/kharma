@@ -299,6 +299,7 @@ void init_GRCoordinates(GRCoordinates& G) {
                         
                         // Apply to storage (multiply by gdet_c because we store gdet*Gamma)
                         GReal correction_term = Delta_Gamma * gdet_c;
+                        printf("Zone %d %d lam %d target: %.3e test_sum: %.3e correction: %.3e\n", i, j, lam, D_k*gdet_c, C_k*gdet_c, correction_term);
 
                         gdet_conn_local(j, i, mu, mu, lam) += correction_term;
 
