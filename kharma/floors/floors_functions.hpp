@@ -278,7 +278,7 @@ KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::normal_onedw>(FLOOR_ONE_
 
     // 3. Add new conserved mass/energy to the current "conserved" state.
     U(m_u.RHO, k, j, i) += rho_ut;
-    U(m_u.UU, k, j, i)  += T[0] + rho_ut;
+    U(m_u.UU, k, j, i)  += T[0];  // Actually T^0_0 + rho u^t
     // Also add to the local primitives to produce a better guess
     P(m_p.RHO, k, j, i) += rho_add;
     P(m_p.UU, k, j, i)  += u_add;
@@ -309,7 +309,7 @@ KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::normal_kastaun>(FLOOR_ON
     // 3. Add new conserved mass/energy to the current "conserved" state.
     // (no need to modify the guess for Kastaun, esp once we sync mu)
     U(m_u.RHO, k, j, i) += rho_ut;
-    U(m_u.UU, k, j, i)  += T[0] + rho_ut;
+    U(m_u.UU, k, j, i)  += T[0]; // Actually T^0_0 + rho u^t
 
     // Recover new primitive variables.  Use Kastaun with safe parameters so we don't fail often
     return Inverter::u_to_p<Inverter::Type::kastaun>(G, U, m_u, gam, k, j, i, P, m_p, Loci::center,
