@@ -176,8 +176,8 @@ KOKKOS_INLINE_FUNCTION int u_to_p<Type::kastaun>(const GRCoordinates& G, const V
     // int num_nans = std::isnan(U(m_u.RHO, k, j, i)) + std::isnan(U(m_u.U1, k, j, i)) + std::isnan(U(m_u.UU, k, j, i));
     // if (num_nans > 0) return static_cast<int>(Status::neg_input);
 
-    // Ensure conserved particle number rho*u0 >= 0
-    // TODO will need to add this to the tally separately if we enable accounting
+    // This exists only to keep the math stable on first call,
+    // so we can add floors instead of failing outright
     if (U(m_u.RHO, k, j, i) < 1e-20) {
         U(m_u.RHO, k, j, i) = 1e-20;
     }
@@ -197,7 +197,7 @@ KOKKOS_INLINE_FUNCTION int u_to_p<Type::kastaun>(const GRCoordinates& G, const V
     const Real ncov[GR_DIM] = {(Real) -alpha, 0., 0., 0.};
     Real ncon[GR_DIM];
     G.raise(ncov, ncon, k, j, i, loc);
-    const Real q = (-dot(Qcov, ncon) - D) / D;
+    const Real q = (-dot(Qcov, ncon) - D) / D; // TODO floor on this?
 
     // r_i
     Real rcov[3] = {U(m_u.U1, k, j, i) / Urho,
@@ -330,26 +330,28 @@ KOKKOS_INLINE_FUNCTION int u_to_p<Type::kastaun>(const GRCoordinates& G, const V
     }
     // TODO keep track iterations actually used
 
+    // Just unwrap everything into primitive vars as-is
+    const Real mu = z;
+    const Real x = res.x_mu(mu);
+    const Real rbarsq = res.rbarsq_mu(mu, x);
+    const Real vsq = res.vhatsq_mu(mu, rbarsq);
+    const Real iW = res.iWhat_mu(vsq);
+    const Real W = 1.0 / iW;
+    const Real qbar = res.qbar_mu(mu, x);
+    // These values should be as *raw* as possible, whether or not they respect the floors
+    // (or even physics).  We will add material and try again if they're bad
+    P(m_p.RHO, k, j, i) = std::max(res.rhohat_mu(iW), 0.);
+    P(m_p.UU, k, j, i) = std::max(res.ehat_mu(mu, qbar, rbarsq, vsq, W) * P(m_p.RHO, k, j, i), 0.);
+    // TODO make sure W*mu*x really should be >0
+    // Latter part is a vector/signed quantity, don't set a minimum at 0
+    SPACELOOP(ii) P(m_p.U1 + ii, k, j, i) = std::max(W * mu * x, 0.) * (rcon[ii] + mu * bdotr * bu[ii]);
+
     // If we should try to recover velocity, do it in this function to re-use the residual object
     if (!recover_velocity) {
-        // Just unwrap everything into primitive vars as-is
-        const Real mu = z;
-        const Real x = res.x_mu(mu);
-        const Real rbarsq = res.rbarsq_mu(mu, x);
-        const Real vsq = res.vhatsq_mu(mu, rbarsq);
-        const Real iW = res.iWhat_mu(vsq);
-        const Real W = 1.0 / iW;
-        const Real qbar = res.qbar_mu(mu, x);
-        // These values should be as *raw* as possible, whether or not they respect the floors
-        // (or even physics).  We will add material and try again if they're bad
-        P(m_p.RHO, k, j, i) = std::max(res.rhohat_mu(iW), 0.);
-        P(m_p.UU, k, j, i) = std::max(res.ehat_mu(mu, qbar, rbarsq, vsq, W) * P(m_p.RHO, k, j, i), 0.);
-        SPACELOOP(ii) P(m_p.U1 + ii, k, j, i) = std::max(W * mu * x, 0.) * (rcon[ii] + mu * bdotr * bu[ii]);
-
-        // Fix if convergence is not established within max_iterations (should be *extremely* rare)
+        // Mark for fix only if convergence is not established within max_iterations (should be *extremely* rare)
         return (iter < max_iterations) ? static_cast<int>(Status::success) : static_cast<int>(Status::max_iter);
     } else {
-        // If we didn't conserve momentum within a loose tolerance based on the solver tol...
+        // Calculate P->U on the inverted values
         const Real rho = P(m_p.RHO, k, j, i);
         const Real u = P(m_p.UU, k, j, i);
         const Real uvec[NVEC] = {P(m_p.U1, k, j, i), P(m_p.U2, k, j, i), P(m_p.U3, k, j, i)};
@@ -357,11 +359,12 @@ KOKKOS_INLINE_FUNCTION int u_to_p<Type::kastaun>(const GRCoordinates& G, const V
         Real rho_ut = 0., T[GR_DIM] = {0.};
         GRMHD::p_to_u_mhd(G, rho, u, uvec, B_P, gam, k, j, i, rho_ut, T);
         const Real bad_vel_tolerance = 200 * tol;
+        // If we didn't conserve momentum within a loose tolerance based on the solver tol...
         if ((std::abs((T[1] - U(m_u.U1, k, j, i)) / U(m_u.U1, k, j, i)) > bad_vel_tolerance) ||
             (std::abs((T[2] - U(m_u.U2, k, j, i)) / U(m_u.U2, k, j, i)) > bad_vel_tolerance) ||
             (std::abs((T[3] - U(m_u.U3, k, j, i)) / U(m_u.U3, k, j, i)) > bad_vel_tolerance)) {
 
-            // ...then solve so function ehat(mu) Kastaun matches our floored value,
+            // ...then solve so function ehat(mu) Kastaun matches the existing value,
             // and use that to reset the velocities.
             // This prioritizes the new thermal energy in the total T^0_0,
             // but dumps any extra back into the velocities to be less disruptive.
@@ -378,7 +381,7 @@ KOKKOS_INLINE_FUNCTION int u_to_p<Type::kastaun>(const GRCoordinates& G, const V
                         - e_actual;
             };
 
-            // Rootfind for mu that would have produced our floored e
+            // Rootfind for mu that would have produced the current e
             bool e_solve_failed = false;
             Real mu = z, mum = 0., mup = 1.;
             if (f(mum) * f(mup) > 0.) {
@@ -408,8 +411,9 @@ KOKKOS_INLINE_FUNCTION int u_to_p<Type::kastaun>(const GRCoordinates& G, const V
             const Real W = 1.0 / iW;
             SPACELOOP(ii) P(m_p.U1 + ii, k, j, i) = std::max(W * mu * x, 0.) * (rcon[ii] + mu * bdotr * bu[ii]);
             return (e_solve_failed) ? static_cast<int>(Status::bad_velocity) : static_cast<int>(Status::floor);
+        } else {
+            return static_cast<int>(Status::success);
         }
-        return static_cast<int>(Status::success);
     }
 }
 
