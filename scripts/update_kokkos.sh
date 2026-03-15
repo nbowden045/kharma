@@ -12,6 +12,9 @@
 
 KHARMA_DIR="$(dirname "${BASH_SOURCE[0]}")/.."
 
+# Ensure we're up to date
+git submodule update --recursive --init
+
 # Bump version of kokkos itself, ahead of what our
 # Parthenon wants
 cd ${KHARMA_DIR}/external/parthenon/external/Kokkos
