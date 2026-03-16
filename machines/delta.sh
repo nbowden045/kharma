@@ -4,7 +4,7 @@ if [[ $HOST == *".delta.internal.ncsa.edu" || $HOST == *".delta.ncsa.illinois.ed
 then
   HOST_ARCH=ZEN3
   DEVICE_ARCH=AMPERE80
-  MPI_EXE=mpirun
+  MPI_EXE=srun
   NPROC=64
 
   # Generally we want the Cray comipiler/environment,

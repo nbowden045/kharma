@@ -229,7 +229,8 @@ std::shared_ptr<KHARMAPackage> Initialize(ParameterInput *pin, std::shared_ptr<P
             hst_vars.emplace_back(parthenon::HistoryOutputVar(UserHistoryOperation::sum, Reductions::SumAt5M<Reductions::Var::ldot>, "Ldot_5M"));
         }
 
-        if (do_all || KHARMA::FieldIsOutput(pin, "eh_fluxes_flux")) {
+        // Add event-horizon fluxes by default as a check
+        if (true || do_all || KHARMA::FieldIsOutput(pin, "eh_fluxes_flux")) {
             hst_vars.emplace_back(parthenon::HistoryOutputVar(UserHistoryOperation::sum, Reductions::SumAt0<Reductions::Var::mdot_flux>, "Mdot_Flux"));
             hst_vars.emplace_back(parthenon::HistoryOutputVar(UserHistoryOperation::sum, Reductions::SumAtEH<Reductions::Var::mdot_flux>, "Mdot_EH_Flux"));
             hst_vars.emplace_back(parthenon::HistoryOutputVar(UserHistoryOperation::sum, Reductions::SumAt5M<Reductions::Var::mdot_flux>, "Mdot_5M_Flux"));
@@ -562,7 +563,7 @@ void CancelBoundaryU3(MeshBlockData<Real> *rc, IndexDomain domain, bool coarse)
             Kokkos::Sum<Real> sum_reducer(U3_sum);
             parthenon::par_reduce_inner(member, bi.ks, bi.ke,
                 [&](const int& k, Real& local_result) {
-                    local_result += isnan(P(m_p.U3, k, jf, i)) ? 0. : P(m_p.U3, k, jf, i);
+                    local_result += m::isnan(P(m_p.U3, k, jf, i)) ? 0. : P(m_p.U3, k, jf, i);
                 }
             , sum_reducer);
             member.team_barrier();
@@ -636,7 +637,7 @@ void CancelBoundaryT3(MeshBlockData<Real> *rc, IndexDomain domain, bool coarse)
             Kokkos::Sum<Real> sum_reducer(T3_sum);
             parthenon::par_reduce_inner(member, bi.ks, bi.ke,
                 [&](const int& k, Real& local_result) {
-                    local_result += isnan(U(m_u.U3, k, jf, i)) ? 0. : U(m_u.U3, k, jf, i);
+                    local_result += m::isnan(U(m_u.U3, k, jf, i)) ? 0. : U(m_u.U3, k, jf, i);
                 }
             , sum_reducer);
             member.team_barrier();
