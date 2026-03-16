@@ -112,8 +112,11 @@ std::shared_ptr<KHARMAPackage> RadM1::Initialize(ParameterInput *pin, std::share
     pkg->AddField("cons.uvec_rad", m_cons_vector);
 
 
-    Real u_rad_floor = pin->GetOrAddReal("RadM1", "u_rad_floor", 1.e-50);
+    Real u_rad_floor = pin->GetOrAddReal("radM1", "u_rad_floor", 1.e-50);
+    Real u_rad_max_floor = pin->GetOrAddReal("radM1", "u_rad_max_floor", 1.e20);
+
     pkg->AllParams().Add("u_rad_floor", u_rad_floor);
+    pkg->AllParams().Add("u_rad_max_floor", u_rad_max_floor);
 
     // New Ratio Parameters (matching your legacy code)
     // Default values are placeholders; you should set reasonable defaults or require them in input.
@@ -126,6 +129,7 @@ std::shared_ptr<KHARMAPackage> RadM1::Initialize(ParameterInput *pin, std::share
     if (MPIRank0()){
         printf("RadM1 floor Parameters:\n");
         printf("u_rad_floor: %e\n", u_rad_floor);
+        printf("u_rad_max_floor: %e\n", u_rad_max_floor);
         printf("rad_rho_min: %e\n", params.Get<Real>("rad_rho_min"));
         printf("rad_rho_max: %e\n", params.Get<Real>("rad_rho_max"));
         printf("rad_u_min: %e\n", params.Get<Real>("rad_u_min"));
@@ -159,6 +163,7 @@ void RadM1::ApplyRadM1Floors(MeshBlockData<Real> *rc, IndexDomain domain)
 
     // 1. Retrieve all parameters
     const Real erad_floor   = params.Get<Real>("u_rad_floor");
+    const Real erad_max_floor = params.Get<Real>("u_rad_max_floor");
     const Real erad_rho_min = params.Get<Real>("rad_rho_min");
     const Real erad_rho_max = params.Get<Real>("rad_rho_max");
     const Real erad_u_min   = params.Get<Real>("rad_u_min");
@@ -188,53 +193,58 @@ void RadM1::ApplyRadM1Floors(MeshBlockData<Real> *rc, IndexDomain domain)
                 P(m_p.UU_RAD, k, j, i) = erad_floor;
             }
 
-            //Radiation vs Density
-            Real rho = P(m_p.RHO, k, j, i);
-            
-            // Radiation too small compared to mass
-            if (ehat < erad_rho_min * rho) {
-                // Boost Radiation
-                ehat = erad_rho_min * rho;
-                P(m_p.UU_RAD, k, j, i) = ehat;
-            }
-
-            // Radiation dominates mass too much
-            if (ehat > erad_rho_max * rho) {
-                // Boost Density -> modifying fluid var from Rad package? I'm blindly following Korals floors checks, should talk to ben
-                // P(m_p.RHO, k, j, i) = ehat / erad_rho_max;
-                P(m_p.UU_RAD, k, j, i) = erad_rho_max * rho;
-            }
-
-            //Radiation vs Internal Energy
-            Real u_gas = P(m_p.UU, k, j, i);
-
-            if (ehat < erad_u_min * u_gas) {
-                // Boost Radiation
-                ehat = erad_u_min * u_gas;
-                P(m_p.UU_RAD, k, j, i) = ehat;
-            }
-
-            // if (ehat > erad_u_max * u_gas) {
-            //     // Boost internal energy -> modifying fluid var from Rad package? I'm blindly following Korals floors checks, should talk to ben
-            //     // P(m_p.UU, k, j, i) = ehat / erad_u_max;
-            //     P(m_p.UU_RAD, k, j, i) = erad_u_max * u_gas;
+            // if (ehat > erad_max_floor) {
+            //     ehat = erad_max_floor;
+            //     P(m_p.UU_RAD, k, j, i) = erad_max_floor;
             // }
 
-            //Radiation and Magnetic Pressure
-            if (has_b_field) {
-                FourVectors Dtmp;
-                GRMHD::calc_4vecs(G, P, m_p, k, j, i, Loci::center, Dtmp);
+            // //Radiation vs Density
+            // Real rho = P(m_p.RHO, k, j, i);
+            
+            // // Radiation too small compared to mass
+            // if (ehat < erad_rho_min * rho) {
+            //     // Boost Radiation
+            //     ehat = erad_rho_min * rho;
+            //     P(m_p.UU_RAD, k, j, i) = ehat;
+            // }
 
-                GReal bsq = 0;
-                DLOOP2 bsq += G.gcov(Loci::center, j, i, mu, nu) * Dtmp.bcon[mu] * Dtmp.bcon[nu];
-                GReal mag_pressure = 0.5 * bsq;
+            // // Radiation dominates mass too much
+            // if (ehat > erad_rho_max * rho) {
+            //     // Boost Density -> modifying fluid var from Rad package? I'm blindly following Korals floors checks, should talk to ben
+            //     // P(m_p.RHO, k, j, i) = ehat / erad_rho_max;
+            //     P(m_p.UU_RAD, k, j, i) = erad_rho_max * rho;
+            // }
 
-                //Apply Magnetic Floor
-                // Simplified: Boost radiation to match magnetic floor
-                if (mag_pressure > erad_b_max * ehat) {
-                    P(m_p.UU_RAD, k, j, i) = mag_pressure / erad_b_max;
-                }
-            }
+            // //Radiation vs Internal Energy
+            // Real u_gas = P(m_p.UU, k, j, i);
+
+            // if (ehat < erad_u_min * u_gas) {
+            //     // Boost Radiation
+            //     ehat = erad_u_min * u_gas;
+            //     P(m_p.UU_RAD, k, j, i) = ehat;
+            // }
+
+            // // if (ehat > erad_u_max * u_gas) {
+            // //     // Boost internal energy -> modifying fluid var from Rad package? I'm blindly following Korals floors checks, should talk to ben
+            // //     // P(m_p.UU, k, j, i) = ehat / erad_u_max;
+            // //     P(m_p.UU_RAD, k, j, i) = erad_u_max * u_gas;
+            // // }
+
+            // //Radiation and Magnetic Pressure
+            // if (has_b_field) {
+            //     FourVectors Dtmp;
+            //     GRMHD::calc_4vecs(G, P, m_p, k, j, i, Loci::center, Dtmp);
+
+            //     GReal bsq = 0;
+            //     DLOOP2 bsq += G.gcov(Loci::center, j, i, mu, nu) * Dtmp.bcon[mu] * Dtmp.bcon[nu];
+            //     GReal mag_pressure = 0.5 * bsq;
+
+            //     //Apply Magnetic Floor
+            //     // Simplified: Boost radiation to match magnetic floor
+            //     if (mag_pressure > erad_b_max * ehat) {
+            //         P(m_p.UU_RAD, k, j, i) = mag_pressure / erad_b_max;
+            //     }
+            // }
         }
     );
 }
