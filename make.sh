@@ -344,6 +344,10 @@ if option "clean"; then
 
   if option "dryrun"; then
     set +x
+    # Describe the kokkos version, for debugging
+    echo "--- Using Kokkos version: ---"
+    (cd external/parthenon/external/Kokkos && git describe --tags --always)
+    echo "-----------------------------"
     exit
   fi
 fi

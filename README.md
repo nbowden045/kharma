@@ -47,7 +47,7 @@ note that *all* options are runtime.  The single KHARMA binary can run any of th
 
 As a broad and capable code, KHARMA has quite a lot of options.  Most are documented [here](https://github.com/AFD-Illinois/kharma/wiki/Parameters), with specific problem setups described [here](https://github.com/AFD-Illinois/kharma/wiki/Problems).
 
-Using `run.sh` is not necessary, feel free to use `kharma.host` or `kharma.cuda` directly.  The script is provided mostly to load any modules or environment variables a machine needs (again, soruced from the file in `machines/`), regardless of whether you're running interactively or as part of a batch script.
+If you need more control, you can use `kharma.host` or `kharma.cuda` directly.  The script is provided mostly to load any modules or environment variables a machine needs (again, soruced from the file in `machines/`), regardless of whether you're running interactively or as part of a batch script.
 
 Further information can be found on the [wiki page](https://github.com/AFD-Illinois/kharma/wiki/Running-KHARMA).
 

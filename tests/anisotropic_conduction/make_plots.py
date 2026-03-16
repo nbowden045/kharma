@@ -111,5 +111,7 @@ if __name__=='__main__':
   if not os.path.exists(params['plotsdir']):
     os.makedirs(params['plotsdir'])
 
-  nthreads = calc_threads()
-  run_parallel(plot, dlist, nthreads)
+  #nthreads = calc_threads()
+  #run_parallel(plot, dlist, nthreads)
+  for d in dlist:
+    plot(d)
