@@ -170,8 +170,6 @@ KOKKOS_INLINE_FUNCTION int determine_floors(const GRCoordinates& G, const Variab
  * All floors which might apply are recorded separately, then mass/energy are added *in normal observer frame*
  * 
  * @return pflag: in NOF, a number <32 representing any failure of the U->P solve.  Otherwise 0.
- * 
- * LOCKSTEP: this function respects P and ignores U in order to return consistent P<->U
  */
 template<InjectionFrame frame>
 KOKKOS_INLINE_FUNCTION int apply_floors(FLOOR_ONE_ARGS);
@@ -280,7 +278,7 @@ KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::normal_onedw>(FLOOR_ONE_
 
     // 3. Add new conserved mass/energy to the current "conserved" state.
     U(m_u.RHO, k, j, i) += rho_ut;
-    U(m_u.UU, k, j, i)  += T[0];
+    U(m_u.UU, k, j, i)  += T[0];  // Actually T^0_0 + rho u^t
     // Also add to the local primitives to produce a better guess
     P(m_p.RHO, k, j, i) += rho_add;
     P(m_p.UU, k, j, i)  += u_add;
@@ -295,14 +293,13 @@ KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::normal_kastaun>(FLOOR_ON
 {
     // Add the material in the normal observer frame.
     // 1. Calculate how much material we're adding.
-    // By using the existing velocities for the rho*u^0 and T^0_0 contributions,
-    // We produce a guaranteed overestimate (since NOF floors will slow the material,
-    // reducing the Lorentz factor)
     const Real rho_add    = m::max(0., rhoflr_max - P(m_p.RHO, k, j, i));
     const Real u_add      = m::max(0., uflr_max - P(m_p.UU, k, j, i));
-    // TODO turn this into an option maybe? Or maybe set rhoflr/uflr using it
-    //const Real uvec[NVEC] = {P(m_p.U1, k, j, i), P(m_p.U2, k, j, i), P(m_p.U3, k, j, i)};
-    const Real uvec[NVEC] = {0.};
+    // We compute rho u^0 and T^00 using the existing velocities to determine Lorentz factor.
+    // This is a guaranteed overestimate of the fluid contributions to these quantities
+    const Real uvec[NVEC] = {P(m_p.U1, k, j, i), P(m_p.U2, k, j, i), P(m_p.U3, k, j, i)};
+    // Alternatively, add less than will produce our floored values
+    //const Real uvec[NVEC] = {0.};
     const Real B[NVEC] = {0.};
 
     // 2. Calculate the increase in conserved mass/energy corresponding to the new material.
@@ -312,7 +309,7 @@ KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::normal_kastaun>(FLOOR_ON
     // 3. Add new conserved mass/energy to the current "conserved" state.
     // (no need to modify the guess for Kastaun, esp once we sync mu)
     U(m_u.RHO, k, j, i) += rho_ut;
-    U(m_u.UU, k, j, i)  += T[0];
+    U(m_u.UU, k, j, i)  += T[0]; // Actually T^0_0 + rho u^t
 
     // Recover new primitive variables.  Use Kastaun with safe parameters so we don't fail often
     return Inverter::u_to_p<Inverter::Type::kastaun>(G, U, m_u, gam, k, j, i, P, m_p, Loci::center,

@@ -12,7 +12,7 @@ if [[ $HOST == *"rc.fas.harvard.edu" ]]; then
     #cp -r $SOURCE_DIR /tmp/kharma
     #cd /tmp/kharma
 
-    HOST_ARCH=HSW
+    HOST_ARCH=SKX
     EXTRA_FLAGS="-DPARTHENON_DISABLE_HDF5_COMPRESSION=ON" # -DPARTHENON_ENABLE_HOST_COMM_BUFFERS=ON"
 
     module purge

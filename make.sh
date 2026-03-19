@@ -37,6 +37,13 @@ fi
 ARGS="$*"
 SOURCE_DIR=$(dirname "$(readlink -f "$0")")
 
+# Parse options in a slightly less insane way than before
+# At least this checks for the full space-separated word as a flag
+args_array=( "$@" )
+option () {
+  printf '%s\0' "${args_array[@]}" | grep -Fxqz -- $1
+}
+
 # A machine config in .config overrides our defaults
 if [ -f $HOME/.config/kharma.sh ]; then
   source $HOME/.config/kharma.sh
@@ -60,19 +67,19 @@ if [[ -v DEVICE_ARCH ]]; then
     EXTRA_FLAGS="-DKokkos_ARCH_${arch}=ON $EXTRA_FLAGS"
   done
 fi
-if [[ "$ARGS" == *"trace"* ]]; then
+if option "trace"; then
   EXTRA_FLAGS="-DKHARMA_TRACE=1 $EXTRA_FLAGS"
 fi
-if [[ "$ARGS" == *"nompi"* ]]; then
+if option "nompi"; then
   EXTRA_FLAGS="-DKHARMA_DISABLE_MPI=1 $EXTRA_FLAGS"
 fi
-if [[ "$ARGS" == *"noimplicit"* ]]; then
+if option "noimplicit"; then
   EXTRA_FLAGS="-DKHARMA_DISABLE_IMPLICIT=1 $EXTRA_FLAGS"
 fi
-if [[ "$ARGS" == *"nocleanup"* ]]; then
+if option "nocleanup"; then
   EXTRA_FLAGS="-DKHARMA_DISABLE_CLEANUP=1 $EXTRA_FLAGS"
 fi
-if [[ "$ARGS" == *"split_implicit"* ]]; then
+if option "split_implicit"; then
   EXTRA_FLAGS="-DKHARMA_SPLIT_IMPLICIT_SOLVE=1 $EXTRA_FLAGS"
 fi
 
@@ -85,11 +92,11 @@ if [[ "$(which python3 2>/dev/null)" == *"conda"* ]]; then
 fi
 # Save arguments if we've changed them
 # Used in run.sh for loading the same modules/etc.
-if [[ "$ARGS" == *"clean"* ]]; then
+if option "clean"; then
   echo "$ARGS" > $SOURCE_DIR/make_args
 fi
 # Choose configuration
-if [[ "$ARGS" == *"debug"* ]]; then
+if option "debug"; then
   TYPE=Debug
 else
   TYPE=Release
@@ -142,7 +149,7 @@ if [[ -z "$CXX_NATIVE" ]]; then
 fi
 # Disable OpenMP for HIP compiles, it gets confused
 # and thinks we want to use OMP 5.0 offload stuff
-if [[ "$ARGS" != *"hip"* ]]; then
+if ! option "hip"; then
   export CXXFLAGS="$OMP_FLAG $CXXFLAGS"
 fi
 
@@ -156,34 +163,34 @@ export CC="$C_NATIVE"
 # OpenMP loop options for KNL:
 # Outer: SIMDFOR_LOOP;MANUAL1D_LOOP;MDRANGE_LOOP;TPTTR_LOOP;TPTVR_LOOP;TPTTRTVR_LOOP
 # Inner: SIMDFOR_INNER_LOOP;TVR_INNER_LOOP
-if [[ "$ARGS" == *"sycl"* ]]; then
+if option "sycl"; then
   OUTER_LAYOUT="MANUAL1D_LOOP"
   INNER_LAYOUT="TVR_INNER_LOOP"
   ENABLE_OPENMP="ON"
   ENABLE_CUDA="OFF"
   ENABLE_SYCL="ON"
   ENABLE_HIP="OFF"
-elif [[ "$ARGS" == *"hip"* ]]; then
+elif option "hip"; then
   OUTER_LAYOUT="MANUAL1D_LOOP"
   INNER_LAYOUT="TVR_INNER_LOOP"
   ENABLE_OPENMP="OFF"
   ENABLE_CUDA="OFF"
   ENABLE_SYCL="OFF"
   ENABLE_HIP="ON"
-elif [[ "$ARGS" == *"cuda"* ]]; then
+elif option "cuda"; then
   export CXX="$SCRIPT_DIR/bin/nvcc_wrapper"
-  if [[ "$ARGS" == *"wrapper_dryrun"* ]]; then
+  if option "wrapper_dryrun"; then
     export CXXFLAGS="-dryrun $CXXFLAGS"
     echo "Dry-running the nvcc wrapper with $CXXFLAGS"
   fi
   export NVCC_WRAPPER_DEFAULT_COMPILER="$CXX_NATIVE"
   OUTER_LAYOUT="MANUAL1D_LOOP"
   INNER_LAYOUT="TVR_INNER_LOOP"
-  ENABLE_OPENMP="ON"
+  ENABLE_OPENMP="OFF"
   ENABLE_CUDA="ON"
   ENABLE_SYCL="OFF"
   ENABLE_HIP="OFF"
-elif [[ "$ARGS" == *"nvc++"* ]]; then
+elif option "nvc++"; then
   OUTER_LAYOUT="MANUAL1D_LOOP"
   INNER_LAYOUT="TVR_INNER_LOOP"
   ENABLE_OPENMP="ON"
@@ -204,7 +211,7 @@ fi
 if [[ -v LINKER ]]; then
   EXTRA_FLAGS="$EXTRA_FLAGS -DCMAKE_LINKER=$LINKER"
 fi
-if [[ "$ARGS" == *"special_link_line"* ]]; then
+if option "special_link_line"; then
   EXTRA_FLAGS="$EXTRA_FLAGS -DCMAKE_CXX_LINK_EXECUTABLE='<CMAKE_LINKER> <FLAGS> <CMAKE_CXX_LINK_FLAGS> <LINK_FLAGS> <OBJECTS> -o <TARGET> <LINK_LIBRARIES>'"
 fi
 
@@ -219,13 +226,13 @@ fi
 
 ### Build HDF5 ###
 # If we're building HDF5, do it after we set *all flags*
-if [[ "$ARGS" == *"hdf5"* && "$ARGS" == *"clean"* && "$ARGS" != *"dryrun"* ]]; then
+if option "hdf5" && option "clean" && ! option "dryrun"; then
   H5VER=1.14.2
   H5VERU=1_14_2
 
   cd external
   # Allow complete reconfigure (for switching compilers, takes longer)
-  if [[ "$ARGS" == *"cleanhdf5"* ]]; then
+  if option "cleanhdf5"; then
     rm -rf hdf5-${H5VER}/
   fi
   # Download if needed
@@ -238,7 +245,7 @@ if [[ "$ARGS" == *"hdf5"* && "$ARGS" == *"clean"* && "$ARGS" != *"dryrun"* ]]; t
   fi
   cd hdf5-${H5VER}/
   # TODO better ensure we're using C_NATIVE underneath.  e.g. MPI_CFLAGS with -cc
-  if  [[ "$ARGS" == *"nompi"* ]]; then
+  if  option "nompi"; then
     HDF_CC=$C_NATIVE
     HDF_EXTRA=""
   else
@@ -273,16 +280,17 @@ if [[ "$ARGS" == *"hdf5"* && "$ARGS" == *"clean"* && "$ARGS" != *"dryrun"* ]]; t
   make clean >> build-hdf5.log 2>&1
   cd ../..
 
-  echo Built HDF5
+  echo Built HDF5 version $H5VER
 fi
-if [[ "$ARGS" == *"hdf5"* ]]; then
+if option "hdf5"; then
   PREFIX_PATH="$SOURCE_DIR/external/hdf5;$PREFIX_PATH"
+  EXTRA_FLAGS="$EXTRA_FLAGS -DHDF5_USE_STATIC_LIBRARIES=ON"
 fi
 
 ### Build KHARMA ###
 # If we're doing a clean build, prep the source and
 # delete the build directory
-if [[ "$ARGS" == *"clean"* ]]; then
+if option "clean"; then
 
   # Should do this manually when compiling on backend nodes!
   if [ ! -f external/parthenon/CMakeLists.txt ]; then
@@ -300,19 +308,13 @@ if [[ "$ARGS" == *"clean"* ]]; then
   cd -
 
   # HIP requires device-capable variant functions
-  if [[ "$ARGS" == *"hip"* ]]; then
+  if option "hip"; then
     cd external/variant
     if [[ $(( $(git --version | cut -d '.' -f 2) > 35 )) == "1" ]]; then
       git apply --quiet ../patches/variant-hip.patch
     else
       git apply ../patches/variant-hip.patch
     fi
-    cd -
-
-    # HIP also prefers new Kokkos.
-    # TODO work something out if on HIP machines w/o internet
-    cd external/parthenon
-    git submodule update --remote external/Kokkos
     cd -
   fi
 
@@ -321,9 +323,9 @@ fi
 mkdir -p build
 cd build
 
-if [[ "$ARGS" == *"clean"* ]]; then
+if option "clean"; then
 
-  if [[ "$ARGS" == *"dryrun"* ]]; then
+  if option "dryrun"; then
     set -x
   fi
 
@@ -340,13 +342,22 @@ if [[ "$ARGS" == *"clean"* ]]; then
     -DKokkos_ENABLE_HIP=$ENABLE_HIP \
     $EXTRA_FLAGS
 
-  if [[ "$ARGS" == *"dryrun"* ]]; then
+  if option "dryrun"; then
     set +x
+    # Describe the kokkos version, for debugging
+    echo "--- Using Kokkos version: ---"
+    (cd external/parthenon/external/Kokkos && git describe --tags --always)
+    echo "-----------------------------"
     exit
   fi
 fi
 
-if [[ "$ARGS" != *"dryrun"* ]]; then
+if ! option "dryrun"; then
   make -j$NPROC
   cp kharma/kharma.* ..
+
+  # Needed now we build packages
+  if option "install"; then
+    make install
+  fi
 fi
