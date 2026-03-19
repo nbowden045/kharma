@@ -50,13 +50,14 @@
 
 // The package should never be loaded if there is not a global solve to be done.
 // Therefore we yell at load time rather than waiting for the first solve
+// But we still need some stubs to compile
 std::shared_ptr<KHARMAPackage> B_Cleanup::Initialize(ParameterInput *pin, std::shared_ptr<Packages_t>& packages)
-{throw std::runtime_error("KHARMA was compiled without global solvers!  Cannot clean B Field!");}
-// We still need some stubs to compile
-// TODO throw to ensure these aren't called if package isn't loaded?
+{
+    throw std::runtime_error("KHARMA was compiled without global solvers!  Cannot clean B Field!");
+}
 TaskStatus B_Cleanup::CleanupDivergence(std::shared_ptr<MeshData<Real>>& md)
 {
-    return TaskStatus::complete;
+    throw std::runtime_error("KHARMA was compiled without global solvers!  Cannot clean B Field!");
 }
 bool B_Cleanup::CleanupThisStep(Mesh* pmesh, int nstep)
 {
