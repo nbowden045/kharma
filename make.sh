@@ -76,9 +76,10 @@ fi
 if option "noimplicit"; then
   EXTRA_FLAGS="-DKHARMA_DISABLE_IMPLICIT=1 $EXTRA_FLAGS"
 fi
-if option "nocleanup"; then
-  EXTRA_FLAGS="-DKHARMA_DISABLE_CLEANUP=1 $EXTRA_FLAGS"
-fi
+# Always disable old resizing, it's broken w/new tasking
+#if option "nocleanup"; then
+EXTRA_FLAGS="-DKHARMA_DISABLE_CLEANUP=1 $EXTRA_FLAGS"
+#fi
 if option "split_implicit"; then
   EXTRA_FLAGS="-DKHARMA_SPLIT_IMPLICIT_SOLVE=1 $EXTRA_FLAGS"
 fi
@@ -200,7 +201,7 @@ elif option "nvc++"; then
   ENABLE_SYCL="OFF"
   ENABLE_HIP="OFF"
 else
-  OUTER_LAYOUT="MDRANGE_LOOP"
+  OUTER_LAYOUT="MANUAL1D_LOOP"
   INNER_LAYOUT="SIMDFOR_INNER_LOOP"
   ENABLE_OPENMP="ON"
   ENABLE_CUDA="OFF"

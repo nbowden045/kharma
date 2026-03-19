@@ -61,7 +61,7 @@ class PoissonEquation {
     if (set_flux_boundary) {
       flux_res = tl.AddTask(flux_res, SetFluxBoundariesZero, md_in);
     }
-    // if (do_flux_cor && !(md_mat->grid.type == parthenon::GridType::two_level_composite)) {
+    // if (do_flux_cor && !(md_mat->grid.type() == parthenon::GridType::two_level_composite)) {
     //   auto start_flxcor =
     //       tl.AddTask(flux_res, parthenon::StartReceiveFluxCorrections, md_in);
     //   auto send_flxcor =
@@ -70,7 +70,7 @@ class PoissonEquation {
     //       tl.AddTask(start_flxcor, parthenon::ReceiveFluxCorrections, md_in);
     //   flux_res = tl.AddTask(recv_flxcor, parthenon::SetFluxCorrections, md_in);
     // }
-    if (do_flux_cor && !(md_mat->grid.type == parthenon::GridType::two_level_composite)) {
+    if (do_flux_cor && !(md_mat->grid.type() == parthenon::GridType::two_level_composite)) {
       flux_res = parthenon::AddBoundaryExchangeTasks(flux_res, tl, md_in, md_in->GetMeshPointer()->multilevel);
     }
     if (set_flux_boundary) {
