@@ -93,14 +93,14 @@ TaskStatus Current::CalculateCurrent(MeshBlockData<Real> *rc0, MeshBlockData<Rea
         KOKKOS_LAMBDA (const int &mu, const int &k, const int &j, const int &i) {
             // Get sqrt{-g}*F^{mu nu} at neighboring points
             // TODO(BSP) this recalculates Fcon a lot...
-            const Real gF0p = get_gdet_Fcon(G, uvec_new, B_P_new, 0, mu, k, j, i);
-            const Real gF0m = get_gdet_Fcon(G, uvec_old, B_P_old, 0, mu, k, j, i);
-            const Real gF1p = get_gdet_Fcon(G, uvec_c, B_P_c, 1, mu, k, j, i+1);
-            const Real gF1m = get_gdet_Fcon(G, uvec_c, B_P_c, 1, mu, k, j, i-1);
-            const Real gF2p = (ndim > 1) ? get_gdet_Fcon(G, uvec_c, B_P_c, 2, mu, k, j+1, i) : 0.;
-            const Real gF2m = (ndim > 1) ? get_gdet_Fcon(G, uvec_c, B_P_c, 2, mu, k, j-1, i) : 0.;
-            const Real gF3p = (ndim > 2) ? get_gdet_Fcon(G, uvec_c, B_P_c, 3, mu, k+1, j, i) : 0.;
-            const Real gF3m = (ndim > 2) ? get_gdet_Fcon(G, uvec_c, B_P_c, 3, mu, k-1, j, i) : 0.;
+            const Real gF0p = get_gdet_Fcon(G, uvec_new, B_P_new, mu, 0, k, j, i);
+            const Real gF0m = get_gdet_Fcon(G, uvec_old, B_P_old, mu, 0, k, j, i);
+            const Real gF1p = get_gdet_Fcon(G, uvec_c, B_P_c, mu, 1, k, j, i+1);
+            const Real gF1m = get_gdet_Fcon(G, uvec_c, B_P_c, mu, 1, k, j, i-1);
+            const Real gF2p = (ndim > 1) ? get_gdet_Fcon(G, uvec_c, B_P_c, mu, 2, k, j+1, i) : 0.;
+            const Real gF2m = (ndim > 1) ? get_gdet_Fcon(G, uvec_c, B_P_c, mu, 2, k, j-1, i) : 0.;
+            const Real gF3p = (ndim > 2) ? get_gdet_Fcon(G, uvec_c, B_P_c, mu, 3, k+1, j, i) : 0.;
+            const Real gF3m = (ndim > 2) ? get_gdet_Fcon(G, uvec_c, B_P_c, mu, 3, k-1, j, i) : 0.;
 
             // Difference: D_mu F^{mu nu} = 4 \pi j^nu
             jcon(mu, k, j, i) = 1. / (m::sqrt(4. * M_PI) * G.gdet(Loci::center, j, i)) *
