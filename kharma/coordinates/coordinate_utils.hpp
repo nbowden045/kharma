@@ -217,8 +217,9 @@ KOKKOS_INLINE_FUNCTION void metric_correction_dcs(const Real a, const Real zeta,
     // Get horizon since correction is radius-dependent
     const Real r_eh = (1 + m::sqrt(1 - m::pow(a,2))) + ((72185 * m::pow(a,2) / 96096) + (189049321 * m::pow(a,4) / 931170240)) * zeta;
 
-    // Get cos(th)
+    // Get cos(th) and sin(th)
     const GReal cth = m::cos(th);
+    const GReal sth = m::sin(th);
 
     // Compute correction
     if (r < r_eh) {
@@ -241,7 +242,7 @@ KOKKOS_INLINE_FUNCTION void metric_correction_dcs(const Real a, const Real zeta,
                     0.021849341728100158*m::pow(cth,4) + 0.002212274207079146*m::pow(cth,6)));
         gcov_corr[2][2] = r*(-0.005891088388619743 - 0.08213157970162656*m::pow(cth,2) +
                     0.04869729617963716*m::pow(cth,4) + r*(0.0012258296731578948 +
-                    0.04059152589803598*m::pow(cth,2) - 0.022648614125266385*m::pow(cth,4)));
+                    0.04059152589803598*m::pow(cth,2) - 0.022648614125266385*m::pow(cth,4))) * m::pow(sth,2);
         gcov_corr[3][3] = r*(0.0779005273559132 - 0.18750384045886062*m::pow(cth,2) +
                     0.07027794119233827*m::pow(cth,4) + r*(-0.03758218403345795 +
                     0.08957607617157008*m::pow(cth,2) - 0.03282515069218463*m::pow(cth,4)));
@@ -289,7 +290,7 @@ KOKKOS_INLINE_FUNCTION void metric_correction_dcs(const Real a, const Real zeta,
                     m::pow(r,3)*(-0.10714813519542485 + 0.21170106044976475*m::pow(cth,2) - 0.10195771531325491*m::pow(cth,4) - 0.002595209941084969*m::pow(cth,6)) + 
                     m::pow(r,2)*(-0.10346977678554554 + 0.234990701941892*m::pow(cth,2) - 0.15957207352714736*m::pow(cth,4) + 0.02805114837080091*m::pow(cth,6)) + 
                     r*(0.0012855403069909927 + 0.07377655505803313*m::pow(cth,2) - 0.15140973103703922*m::pow(cth,4) + 0.07634763567201511*m::pow(cth,6)))/m::pow(r,9);
-        gcov_corr[2][2] = (2.185855263157895*m::pow(cth,4) + m::pow(r,8)*(0.0033429657288016426 - 0.024386800500625968*m::pow(cth,2)) + 
+        gcov_corr[2][2] = ((2.185855263157895*m::pow(cth,4) + m::pow(r,8)*(0.0033429657288016426 - 0.024386800500625968*m::pow(cth,2)) + 
                     m::pow(r,3)*(0.006730793813251797 - 0.5711805832626268*m::pow(cth,2) - 0.028538110480973156*m::pow(cth,4)) + 
                     m::pow(r,7)*(0.006907947918770011 - 0.005498612955602743*m::pow(cth,2) - 0.009891183035714287*m::pow(cth,4)) + 
                     m::pow(r,4)*(0.010639314047962048 - 0.2088143702955665*m::pow(cth,2) - 0.008911408117718933*m::pow(cth,4)) + 
@@ -297,7 +298,7 @@ KOKKOS_INLINE_FUNCTION void metric_correction_dcs(const Real a, const Real zeta,
                     m::pow(r,6)*(0.009614703564723954 + 0.0025952067717499227*m::pow(cth,2) + 0.0035080403187452754*m::pow(cth,4)) + 
                     m::pow(r,9)*(-0.019512591789299767 + 0.02926262957652467*m::pow(cth,2) + 0.010298255966503736*m::pow(cth,4)) + 
                     m::pow(r,2)*(0.000149323899600326 - 1.2358144829850521*m::pow(cth,2) + 0.18861356442701813*m::pow(cth,4)) + 
-                    r*(-0.0016613798015832518*m::pow(cth,2) + 0.7709044110221688*m::pow(cth,4)))/m::pow(r,10);
+                    r*(-0.0016613798015832518*m::pow(cth,2) + 0.7709044110221688*m::pow(cth,4)))/m::pow(r,10)) * m::pow(sth,2);
         gcov_corr[3][3] = (-0.021043834771824328*m::pow(r,8) + 2.185855263157895*m::pow(cth,4) + 
                     m::pow(r,7)*(0.03337541444374187 - 0.031966079480574595*m::pow(cth,2) - 0.009891183035714287*m::pow(cth,4)) + 
                     m::pow(r,6)*(0.09176977844624386 - 0.08243249139825083*m::pow(cth,2) + 0.006380663607226107*m::pow(cth,4)) + 
@@ -316,10 +317,11 @@ KOKKOS_INLINE_FUNCTION void metric_correction_dcs(const Real a, const Real zeta,
 KOKKOS_INLINE_FUNCTION void metric_correction_edgb(const Real a, const Real zeta, const GReal r, const GReal th, Real gcov_corr[GR_DIM][GR_DIM])
 {
     // Get horizon since correction is radius-dependent
-    const Real r_eh = (1 + m::sqrt(1 - m::pow(a,2))) + (-(1117 / 2310) - (3697 * m::pow(a,2) / 5850) + (211270219 * m::pow(a,4) / 1018467450)) * zeta;
+    const Real r_eh = (1 + m::sqrt(1 - m::pow(a,2))) + (-(1117. / 2310.) - (3697 * m::pow(a,2) / 5850) + (211270219 * m::pow(a,4) / 1018467450)) * zeta;
 
-    // Get cos(th)
+    // Get cos(th) and sin(th)
     const GReal cth = m::cos(th);
+    const GReal sth = m::sin(th);
 
     // Compute correction
     if (r < r_eh) {
@@ -342,7 +344,7 @@ KOKKOS_INLINE_FUNCTION void metric_correction_edgb(const Real a, const Real zeta
                     0.024521350206178745*m::pow(cth,4) + 0.0002991803500262339*m::pow(cth,6)));
         gcov_corr[2][2] = r * (-0.2456694322274893 + 0.11802793355278088*m::pow(cth,2) -
                     0.06388746774868627*m::pow(cth,4) + r * (0.11088665306540471 -
-                    0.06020804162310437*m::pow(cth,2) + 0.033009174906014245*m::pow(cth,4)));
+                    0.06020804162310437*m::pow(cth,2) + 0.033009174906014245*m::pow(cth,4))) * m::pow(sth,2);
         gcov_corr[3][3] = r * (-0.10427504873012293 - 0.05238594045593648*m::pow(cth,2) -
                     0.034867977237335264*m::pow(cth,4) + r * (0.04443039634840591 +
                     0.02057044808324951*m::pow(cth,2) + 0.01868694191665917*m::pow(cth,4)));
@@ -390,7 +392,7 @@ KOKKOS_INLINE_FUNCTION void metric_correction_edgb(const Real a, const Real zeta
                     m::pow(r,8)*(0.004042832787549678 - 0.009322832314312596*m::pow(cth,2) + 0.007506302960432425*m::pow(cth,4) - 0.002226303433669505*m::pow(cth,6)) + 
                     m::pow(r,2)*(-0.09979646693535539 + 0.22353023569085523*m::pow(cth,2) - 0.14767107057564424*m::pow(cth,4) + 0.02393730182014443*m::pow(cth,6)) + 
                     r*(0.0015552425331560671 + 0.06452527650736407*m::pow(cth,2) - 0.13371628061419635*m::pow(cth,4) + 0.0676357615736762*m::pow(cth,6)))/m::pow(r,9);
-        gcov_corr[2][2] = (-2.497480063795853*m::pow(cth,4) + 
+        gcov_corr[2][2] = ((-2.497480063795853*m::pow(cth,4) + 
                     m::pow(r,8)*(-0.00041852575015099877 + 0.012133578033639538*m::pow(cth,2)) + 
                     r*(-0.052007901872563524*m::pow(cth,2) - 0.7819199040676263*m::pow(cth,4)) + 
                     m::pow(r,2)*(0.0013914126287246588 + 1.7171821549408626*m::pow(cth,2) - 0.14701008360036444*m::pow(cth,4)) + 
@@ -399,7 +401,7 @@ KOKKOS_INLINE_FUNCTION void metric_correction_edgb(const Real a, const Real zeta
                     m::pow(r,7)*(-0.0072303365947720705 - 0.007939422645679456*m::pow(cth,2) + 0.001249323593073593*m::pow(cth,4)) + 
                     m::pow(r,9)*(-0.056750235572314435 - 0.010559999053525839*m::pow(cth,2) + 0.00445260686733901*m::pow(cth,4)) + 
                     m::pow(r,4)*(-0.5106316084099219 + 0.19908686704982395*m::pow(cth,2) + 0.028473515888031427*m::pow(cth,4)) + 
-                    m::pow(r,3)*(0.028197926131824688 + 0.6750414186358245*m::pow(cth,2) + 0.08076936297872989*m::pow(cth,4))) / m::pow(r,10);
+                    m::pow(r,3)*(0.028197926131824688 + 0.6750414186358245*m::pow(cth,2) + 0.08076936297872989*m::pow(cth,4))) / m::pow(r,10)) * m::pow(sth,2);
         gcov_corr[3][3] = (0.011715052283488538*m::pow(r,8) - 2.497480063795853*m::pow(cth,4) + 
                     r*(-0.2615718116469996*m::pow(cth,2) - 0.5723559942931902*m::pow(cth,4)) + 
                     m::pow(r,6)*(-0.11989098816006717 - 0.1484125805140812*m::pow(cth,2) - 0.003579156954156954*m::pow(cth,4)) + 
@@ -440,7 +442,7 @@ KOKKOS_INLINE_FUNCTION void radius_correction_dcs(const Real a, const Real zeta,
 KOKKOS_INLINE_FUNCTION void radius_correction_edgb(const Real a, const Real zeta, const GReal r, const GReal th, Real &r_new)
 {
     // Get horizon since correction is radius-dependent
-    const Real r_eh =(1 + m::sqrt(1 - m::pow(a,2))) + (-(1117 / 2310) - (3697 * m::pow(a,2) / 5850) + (211270219 * m::pow(a,4) / 1018467450)) * zeta;
+    const Real r_eh =(1 + m::sqrt(1 - m::pow(a,2))) + (-(1117. / 2310.) - (3697 * m::pow(a,2) / 5850) + (211270219 * m::pow(a,4) / 1018467450)) * zeta;
 
     // Get cos(th)
     const GReal cth = m::cos(th);

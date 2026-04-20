@@ -454,7 +454,7 @@ class DCSBLCoords {
 
             const GReal cth = m::cos(th);
             const GReal sth = m::sin(th);
-            const GReal s2t = sth*sth;
+            // const GReal s2t = sth*sth;
             const GReal c2t = cth*cth; 
             const GReal c4t = c2t*c2t;
             // const GReal rho2 = r*r + a*a*cth*cth;
@@ -604,9 +604,9 @@ class EDGBKSCoords {
 
             const GReal cth = m::cos(th);
             const GReal sth = m::sin(th);
-            const GReal s2t = sth*sth;
+            // const GReal s2t = sth*sth;
             const GReal c2t = cth*cth; 
-            const GReal c4t = c2t*c2t;
+            // const GReal c4t = c2t*c2t;
             const GReal a2  = a * a;
             const GReal a3  = a * a2 ;
             const GReal a4  = a2 * a2;
@@ -676,7 +676,7 @@ class EDGBBLCoords {
 
             const GReal cth = m::cos(th);
             const GReal sth = m::sin(th);
-            const GReal s2t = sth*sth;
+            // const GReal s2t = sth*sth;
             const GReal c2t = cth*cth; 
             const GReal c4t = c2t*c2t;
             // const GReal rho2 = r*r + a*a*cth*cth;
