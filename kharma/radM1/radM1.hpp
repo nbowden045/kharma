@@ -53,7 +53,8 @@ std::shared_ptr<KHARMAPackage> Initialize(ParameterInput *pin, std::shared_ptr<P
 /**
  * Add the radM1 source term.  Applied in Flux::AddSource, just after the FluxDivergence calculation
  */
-TaskStatus AddSource(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDomain domain);
+//TaskStatus AddSource(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDomain domain);
+TaskStatus AddImplicitRadiationSourceTerms(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDomain domain);
 
 /**
  * Convert from conserved to primitive variables for the radiation field.

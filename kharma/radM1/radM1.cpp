@@ -35,6 +35,7 @@
 #include "kharma_driver.hpp"
 #include "units.hpp"
 #include "kharma.hpp"
+#include "inverter.hpp"  // Add this include
 
 std::shared_ptr<KHARMAPackage> RadM1::Initialize(ParameterInput *pin, std::shared_ptr<Packages_t>& packages)
 {
@@ -115,6 +116,23 @@ std::shared_ptr<KHARMAPackage> RadM1::Initialize(ParameterInput *pin, std::share
     Real u_rad_floor = pin->GetOrAddReal("RadM1", "u_rad_floor", 1.e-50);
     pkg->AllParams().Add("u_rad_floor", u_rad_floor);
 
+
+    // 1. The exact number of variables (5 GRMHD + 4 Rad = 9)
+    // This ensures your guess vector is exactly the size of your physics.
+    int nv = 9; 
+
+    // 2. Define custom flags so they don't mix with standard physics
+    MetadataFlag rad_guess_p = Metadata::GetUserFlag("RadGuessP");
+    MetadataFlag rad_guess_u = Metadata::GetUserFlag("RadGuessU");
+
+    // 3. Register the fields. 
+    // Note: The shape {nv} MUST go inside the Metadata constructor braces.
+    Metadata m_p_guess({Metadata::Independent, rad_guess_p}, std::vector<int>{nv});
+    pkg->AddField("RadM1.p_guess", m_p_guess);
+
+    Metadata m_u_guess({Metadata::Independent, rad_guess_u}, std::vector<int>{nv});
+    pkg->AddField("RadM1.u_guess", m_u_guess);
+
     // New Ratio Parameters (matching your legacy code)
     // Default values are placeholders; you should set reasonable defaults or require them in input.
     pkg->AllParams().Add("rad_rho_min", pin->GetOrAddReal("radM1", "rad_rho_min", 1.e-20));
@@ -140,7 +158,7 @@ std::shared_ptr<KHARMAPackage> RadM1::Initialize(ParameterInput *pin, std::share
     //Especially because we'll want to initialize the radiation field for other problems. 
 
     //This method should allow you to add source terms to both plasma and radiation variables separately.
-    pkg->AddSource = RadM1::AddSource;
+    pkg->AddSource = RadM1::AddImplicitRadiationSourceTerms;
 
     //Add inversion to the tasks
     pkg->BlockUtoP = RadM1::BlockUtoP;
@@ -154,10 +172,8 @@ std::shared_ptr<KHARMAPackage> RadM1::Initialize(ParameterInput *pin, std::share
 void RadM1::ApplyRadM1Floors(MeshBlockData<Real> *rc, IndexDomain domain)
 {
     auto pmb = rc->GetBlockPointer();
-    const auto& G = pmb->coords;
     auto& params = pmb->packages.Get("RadM1")->AllParams();
 
-    // 1. Retrieve all parameters
     const Real erad_floor   = params.Get<Real>("u_rad_floor");
     const Real erad_rho_min = params.Get<Real>("rad_rho_min");
     const Real erad_rho_max = params.Get<Real>("rad_rho_max");
@@ -188,53 +204,53 @@ void RadM1::ApplyRadM1Floors(MeshBlockData<Real> *rc, IndexDomain domain)
                 P(m_p.UU_RAD, k, j, i) = erad_floor;
             }
 
-            //Radiation vs Density
-            Real rho = P(m_p.RHO, k, j, i);
+            // //Radiation vs Density
+            // Real rho = P(m_p.RHO, k, j, i);
             
-            // Radiation too small compared to mass
-            if (ehat < erad_rho_min * rho) {
-                // Boost Radiation
-                ehat = erad_rho_min * rho;
-                P(m_p.UU_RAD, k, j, i) = ehat;
-            }
-
-            // Radiation dominates mass too much
-            if (ehat > erad_rho_max * rho) {
-                // Boost Density -> modifying fluid var from Rad package? I'm blindly following Korals floors checks, should talk to ben
-                // P(m_p.RHO, k, j, i) = ehat / erad_rho_max;
-                P(m_p.UU_RAD, k, j, i) = erad_rho_max * rho;
-            }
-
-            //Radiation vs Internal Energy
-            Real u_gas = P(m_p.UU, k, j, i);
-
-            if (ehat < erad_u_min * u_gas) {
-                // Boost Radiation
-                ehat = erad_u_min * u_gas;
-                P(m_p.UU_RAD, k, j, i) = ehat;
-            }
-
-            // if (ehat > erad_u_max * u_gas) {
-            //     // Boost internal energy -> modifying fluid var from Rad package? I'm blindly following Korals floors checks, should talk to ben
-            //     // P(m_p.UU, k, j, i) = ehat / erad_u_max;
-            //     P(m_p.UU_RAD, k, j, i) = erad_u_max * u_gas;
+            // // Radiation too small compared to mass
+            // if (ehat < erad_rho_min * rho) {
+            //     // Boost Radiation
+            //     ehat = erad_rho_min * rho;
+            //     P(m_p.UU_RAD, k, j, i) = ehat;
             // }
 
-            //Radiation and Magnetic Pressure
-            if (has_b_field) {
-                FourVectors Dtmp;
-                GRMHD::calc_4vecs(G, P, m_p, k, j, i, Loci::center, Dtmp);
+            // // Radiation dominates mass too much
+            // if (ehat > erad_rho_max * rho) {
+            //     // Boost Density -> modifying fluid var from Rad package? I'm blindly following Korals floors checks, should talk to ben
+            //     // P(m_p.RHO, k, j, i) = ehat / erad_rho_max;
+            //     P(m_p.UU_RAD, k, j, i) = erad_rho_max * rho;
+            // }
 
-                GReal bsq = 0;
-                DLOOP2 bsq += G.gcov(Loci::center, j, i, mu, nu) * Dtmp.bcon[mu] * Dtmp.bcon[nu];
-                GReal mag_pressure = 0.5 * bsq;
+            // //Radiation vs Internal Energy
+            // Real u_gas = P(m_p.UU, k, j, i);
 
-                //Apply Magnetic Floor
-                // Simplified: Boost radiation to match magnetic floor
-                if (mag_pressure > erad_b_max * ehat) {
-                    P(m_p.UU_RAD, k, j, i) = mag_pressure / erad_b_max;
-                }
-            }
+            // if (ehat < erad_u_min * u_gas) {
+            //     // Boost Radiation
+            //     ehat = erad_u_min * u_gas;
+            //     P(m_p.UU_RAD, k, j, i) = ehat;
+            // }
+
+            // // if (ehat > erad_u_max * u_gas) {
+            // //     // Boost internal energy -> modifying fluid var from Rad package? I'm blindly following Korals floors checks, should talk to ben
+            // //     // P(m_p.UU, k, j, i) = ehat / erad_u_max;
+            // //     P(m_p.UU_RAD, k, j, i) = erad_u_max * u_gas;
+            // // }
+
+            // //Radiation and Magnetic Pressure
+            // if (has_b_field) {
+            //     FourVectors Dtmp;
+            //     GRMHD::calc_4vecs(G, P, m_p, k, j, i, Loci::center, Dtmp);
+
+            //     GReal bsq = 0;
+            //     DLOOP2 bsq += G.gcov(Loci::center, j, i, mu, nu) * Dtmp.bcon[mu] * Dtmp.bcon[nu];
+            //     GReal mag_pressure = 0.5 * bsq;
+
+            //     //Apply Magnetic Floor
+            //     // Simplified: Boost radiation to match magnetic floor
+            //     if (mag_pressure > erad_b_max * ehat) {
+            //         P(m_p.UU_RAD, k, j, i) = mag_pressure / erad_b_max;
+            //     }
+            // }
         }
     );
 }
@@ -422,236 +438,261 @@ TaskStatus RadM1::BlockUtoP(MeshBlockData<Real> *rc, IndexDomain domain, bool co
 }
 
 
-// Is this function called before or after the conversion of U to P? 
-// I think it should be before, since we need the radiation four-force to update the conserved variables.
-TaskStatus RadM1::AddSource(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDomain domain)
+KOKKOS_INLINE_FUNCTION void calc_Gnu(const Real rho, const Real ug, GReal * Gnu_gdet){
+
+    Gnu_gdet[0] = 0.0; // Energy exchange term
+    Gnu_gdet[1] = 0.0; // Momentum exchange term in x
+    Gnu_gdet[2] = 0.0; // Momentum exchange term in
+    Gnu_gdet[3] = 0.0; // Momentum exchange term in z
+    
+}
+
+
+KOKKOS_INLINE_FUNCTION int SetImplicitInitialGuess(
+    const GRCoordinates& G, const VarMap& m_p, const VarMap& m_u, 
+    VariablePack<Real>& U, VariablePack<Real>& U_guess, VariablePack<Real>& P_guess, VariablePack<Real>& dU, 
+    const Real dt, const int k, const int j, const int i, 
+    GReal* Gnu_gdet, const int iter_max, const Real err_tol, const Real gam)
 {
-    auto pmb0 = mdudt->GetBlockData(0)->GetBlockPointer();
+// The function will follow:
+// 1. Calculate U->P for gas and radiation variables
+// 2. Then Recalculate U from P for gas variables.
+// 3. Calculate the source term Gnu from this P.
+// 4. Calculate \Delta U = (sqrt(-g)) * Gnu * dt
+// 5. Calculate relative error for the gas variables:
+    // Energy: 
+        // Norm_0 = |U_n_0| + |U_{n+1}_0| + |dt * dU_0|
+        // Error_0 = 0.25 * |U_{n+1}_0 - U_n_0 - dt * dU_0| / Norm_0
+
+    // Momentum:
+        // Combine the scale of all 3 momentum directions into one norm
+        // Norm_mom = (|sqrt(g^11) * U_n_1| + |sqrt(g^11) * U_{n+1}_1| + |sqrt(g^11) * dt * dU_1|) +
+        //            (|sqrt(g^22) * U_n_2| + |sqrt(g^22) * U_{n+1}_2| + |sqrt(g^22) * dt * dU_2|) +
+        //            (|sqrt(g^33) * U_n_3| + |sqrt(g^33) * U_{n+1}_3| + |sqrt(g^33) * dt * dU_3|)
+    
+        // Fallback if the gas is perfectly stationary:
+        // if (Norm_mom == 0) Norm_mom = Norm_0; 
+    
+        // Error_1 = 0.25 * sqrt(g^11) * |U_{n+1}_1 - U_n_1 - dt * dU_1| / Norm_mom
+        // Error_2 = 0.25 * sqrt(g^22) * |U_{n+1}_2 - U_n_2 - dt * dU_2| / Norm_mom
+        // Error_3 = 0.25 * sqrt(g^33) * |U_{n+1}_3 - U_n_3 - dt * dU_3| / Norm_mom
+    
+    // Total_Gas_Error = Error_0 + Error_1 + Error_2 + Error_3
+// 6. Calculate the relative error for the radiation variables
+    // Energy:
+        // Norm_rad_0 = |U_n_RAD_0| + |U_{n+1}_RAD_0| + |dt * dU_RAD_0|
+        // Error_rad_0 = 0.25 * |U_{n+1}_RAD_0 - U_n_RAD_0 + dt * dU_RAD_0| / Norm_rad_0
+    // Momentum:
+        // Combine the scale of all 3 momentum directions into one norm
+        // Norm_rad_mom = (|sqrt(g^11) * U_n_RAD_1| + |sqrt(g^11) * U_{n+1}_RAD_1| + |sqrt(g^11) * dt * dU_RAD_1|) +
+        //                (|sqrt(g^22) * U_n_RAD_2| + |sqrt(g^22) * U_{n+1}_RAD_2| + |sqrt(g^22) * dt * dU_RAD_2|) +
+        //                (|sqrt(g^33) * U_n_RAD_3| + |sqrt(g^33) * U_{n+1}_RAD_3| + |sqrt(g^33) * dt * dU_RAD_3|)
+        // Fallback if the radiation is perfectly stationary:
+        // if (Norm_rad_mom == 0) Norm_rad_mom = Norm_rad_0;
+        // Error_rad_1 = 0.25 * sqrt(g^11) * |U_{n+1}_RAD_1 - U_n_RAD_1 + dt * dU_RAD_1| / Norm_rad_mom
+        // Error_rad_2 = 0.25 * sqrt(g^22) * |U_{n+1}_RAD_2 - U_n_RAD_2 + dt * dU_RAD_2| / Norm_rad_mom
+        // Error_rad_3 = 0.25 * sqrt(g^33) * |U_{n+1}_RAD_3 - U_n_RAD_3 + dt * dU_RAD_3| / Norm_rad_mom
+        // Total_Rad_Error = Error_rad_0 + Error_rad_1 + Error_rad_2 + Error_rad_3
+    
+    // Total error = Total_Gas_Error + Total_Rad_Error. If err < 1.e-12. We don't even need to do the implicit solve. This might be for cases where Gnu is
+    // not stiff.
+
+    // Note for future readers: If we evaluated the $\theta$ or $\phi$ direction individually when computing the error, 
+    // the local momentum in that specific direction might be zero, causing a division by zero. By summing all three directions into Norm_mom,
+    // we are essentially dividing by the "total momentum scale" of the fluid cell, which is much safer and more physically meaningful.
+
+
+    // Here we are getting the first u_to_p conversion for the gas variables.
+    int pflag = Inverter::u_to_p<Inverter::Type::kastaun>(G, U, m_u, gam, k, j, i, P_guess, m_p, Loci::center, iter_max, err_tol, false);
+
+    //Now we have to recompute U_guess from P_guess for the gas variables.
+    GRMHD::p_to_u(G, P_guess, m_p, gam, k, j, i, U_guess, m_u, Loci::center);
+    
+    // Calculate source terms from the initial guess of the primitives.
+    calc_Gnu(0.0, 0.0, Gnu_gdet);
+    
+    // Compute the gas errors
+    Real sqrt_g11 = sqrt(fabs(G.gcon(Loci::center, j, i, 1, 1)));
+    Real sqrt_g22 = sqrt(fabs(G.gcon(Loci::center, j, i, 2, 2)));
+    Real sqrt_g33 = sqrt(fabs(G.gcon(Loci::center, j, i, 3, 3)));
+
+    Real norm_0 = fabs(U(m_u.UU, k, j, i)) + fabs(U_guess(m_u.UU, k, j, i)) + fabs(dt * dU(m_u.UU, k, j, i));
+    Real err_0 = 0.0;
+    if (norm_0 > 0.0) {
+        err_0 = 0.25 * fabs(U_guess(m_u.UU, k, j, i) - U(m_u.UU, k, j, i) - dt * dU(m_u.UU, k, j, i)) / norm_0;
+    }
+
+    Real norm_mom = 
+        (sqrt_g11 * fabs(U(m_u.U1, k, j, i)) + sqrt_g11 * fabs(U_guess(m_u.U1, k, j, i)) + sqrt_g11 * fabs(dt * dU(m_u.U1, k, j, i))) +
+        (sqrt_g22 * fabs(U(m_u.U2, k, j, i)) + sqrt_g22 * fabs(U_guess(m_u.U2, k, j, i)) + sqrt_g22 * fabs(dt * dU(m_u.U2, k, j, i))) +
+        (sqrt_g33 * fabs(U(m_u.U3, k, j, i)) + sqrt_g33 * fabs(U_guess(m_u.U3, k, j, i)) + sqrt_g33 * fabs(dt * dU(m_u.U3, k, j, i)));
+
+    if (norm_mom == 0.0) norm_mom = norm_0;
+
+    // Momentum Errors
+    Real err_1 = 0.25 * sqrt_g11 * fabs(U_guess(m_u.U1, k, j, i) - U(m_u.U1, k, j, i) - dt * dU(m_u.U1, k, j, i)) / norm_mom;
+    Real err_2 = 0.25 * sqrt_g22 * fabs(U_guess(m_u.U2, k, j, i) - U(m_u.U2, k, j, i) - dt * dU(m_u.U2, k, j, i)) / norm_mom;
+    Real err_3 = 0.25 * sqrt_g33 * fabs(U_guess(m_u.U3, k, j, i) - U(m_u.U3, k, j, i) - dt * dU(m_u.U3, k, j, i)) / norm_mom;
+
+    Real total_gas_error = err_0 + err_1 + err_2 + err_3;
+
+    //Radiation errors
+    Real total_rad_error = 0.0;
+
+    // --- Final Error Check ---
+    Real total_error = total_gas_error + total_rad_error;
+    
+
+    if(total_error < 1e-12){
+        // Skip implicit solve for this cell, for this we use flag = 0;
+        return 0;
+    }else{
+        // Proceed with implicit solve, for this we use flag = 1;
+        return 1;
+    }
+}
+
+KOKKOS_INLINE_FUNCTION void ImplicitSolver(
+    const GRCoordinates& G, const VarMap& m_p, const VarMap& m_u, 
+    VariablePack<Real>& P_guess, VariablePack<Real>& U_guess, const VariablePack<Real>& U, const VariablePack<Real>& dU, 
+    const Real dt, const int k, const int j, const int i, 
+    GReal* Gnu_gdet, const int iter_max, const Real err_tol, const Real gam)
+{
+    // This function will use the secant method to update the radiation variables.
+    // There might be a better way to do this, I'm sure...
+    
+    Real R_old[4], R_curr[4], R_new[4];
+    Real Residual_old[4], Residual_curr[4];
+    
+    int rad_indices[4] = {m_u.UU_RAD, m_u.U1_RAD, m_u.U2_RAD, m_u.U3_RAD};
+    int gas_indices[4] = {m_u.UU, m_u.U1, m_u.U2, m_u.U3};
+    
+    for(int d = 0; d < 4; ++d) {
+        // Set the initial guess for R to the current inverted value from the initial guess.
+        R_curr[d] = U_guess(rad_indices[d], k, j, i);
+
+        // For the secant method's first step, we need a slight perturbation for R_old
+        R_old[d] = R_curr[d] * 0.999 + 1e-15; 
+        
+        // Residual = R_{guess} - R_n + dt * Gnu_guess
+        // dR/dt = -Gnu, so R_np1 = R_n - dt * Gnu
+        Residual_curr[d] = R_curr[d] - U(rad_indices[d], k, j, i) + dt * Gnu_gdet[d];
+        Residual_old[d] = Residual_curr[d]; // Will be updated in loop
+    }
+
+    int iter = 0;
+    int iter_max_secant = 10;
+    int err_tol_secant = 1.e-12;
+    Real max_res = 1.0;
+
+    while (iter < iter_max_secant && max_res > err_tol_secant) {
+        max_res = 0.0;
+        
+        for(int d = 0; d < 4; ++d) {
+            Real dRes = Residual_curr[d] - Residual_old[d];
+            
+            // This could be zero, therefore I will redefine it as 1e-16, just cause it's the double precision limit, but we can change it if we want.
+            if (fabs(dRes) < 1e-16) {
+                R_new[d] = R_curr[d]; 
+            } else {
+                // Here we update the new try with the secant method formula
+                // x_{new} = x - Res(x) * (x - x_{old}) / (Res(x) - Res(x_{old}))
+                R_new[d] = R_curr[d] - Residual_curr[d] * (R_curr[d] - R_old[d]) / dRes;
+            }
+            
+            // Update history
+            R_old[d] = R_curr[d];
+            Residual_old[d] = Residual_curr[d];
+            R_curr[d] = R_new[d];
+            
+            // Update local state for next evaluation
+            U_guess(rad_indices[d], k, j, i) = R_curr[d];
+        }
+
+        // Re-evaluate Physics with R_curr (New Guess)
+        // Sadowski Eq 56 principle: U_gas_{new} is linked to R_{new} via conservation
+        for(int d = 0; d < 4; ++d) {
+            U_guess(gas_indices[d], k, j, i) = U(gas_indices[d], k, j, i) + dt * dU(gas_indices[d], k, j, i) - (R_curr[d] - U(rad_indices[d], k, j, i));
+        }
+
+        // Invert to Primitives and Re-calculate Gnu
+    
+        Inverter::u_to_p<Inverter::Type::kastaun>(G, U_guess, m_u, gam, k, j, i, P_guess, m_p, Loci::center, iter_max, err_tol, false);
+        GRMHD::p_to_u(G, P_guess, m_p, gam, k, j, i, U_guess, m_u, Loci::center);
+        
+        calc_Gnu(0.0, 0.0, Gnu_gdet); // Recalculate Gnu with the new guess. Here we are just using a placeholder since we don't have the actual physics implemented yet.
+
+        //Compute New Residuals
+        for(int d = 0; d < 4; ++d) {
+            Residual_curr[d] = R_curr[d] - U(rad_indices[d], k, j, i) + dt * Gnu_gdet[d];
+            if (fabs(Residual_curr[d]) > max_res) max_res = fabs(Residual_curr[d]);
+        }
+        
+        iter++;
+    }
+}
+
+// This function will be a wrapper for the different implicit methods used to calculate the radiation four-force.
+// For now I'm following Ben's advice to solely implement the secant method. It has no safe guards.
+TaskStatus RadM1::AddImplicitRadiationSourceTerms(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDomain domain)
+{
+
+    auto pmb0 = md->GetBlockData(0)->GetBlockPointer();
+    const auto& G = pmb0->coords;
+
+    const Real gam = pmb0->packages.Get("GRMHD")->Param<Real>("gamma");
+    // Get from inverter package. Errors and tolerances
+    auto &pars_inverter = pmb0->packages.Get("Inverter")->AllParams();
+    const int iter_max = pmb0->packages.Get("Inverter")->Param<int>("iter_max");
+    const Real err_tol = pmb0->packages.Get("Inverter")->Param<Real>("err_tol");
 
     // Pack Conserved Variables
     PackIndexMap cons_map;
-    auto dUdt = mdudt->PackVariables(std::vector<MetadataFlag>{Metadata::Conserved}, cons_map);
     auto U = md->PackVariables(std::vector<MetadataFlag>{Metadata::Conserved}, cons_map);
-    const VarMap m_u(cons_map, true);
+    const VarMap m_u(cons_map, true); // Now map is safely populated
 
     // Pack Primitive Variables
     PackIndexMap prim_map;
     auto P = md->PackVariables(std::vector<MetadataFlag>{Metadata::GetUserFlag("Primitive")}, prim_map);
     const VarMap m_p(prim_map, false);
 
+    const Real dt =  pmb0->packages.Get("Globals")->Param<Real>("dt_last"); // I have no idea if this is the way to get the last dt, but I assume it is. Copied straight out of hubble.cpp
+    auto dU = mdudt->PackVariables(std::vector<MetadataFlag>{Metadata::Conserved});
+
+    
+    auto U_guess = md->PackVariables(std::vector<MetadataFlag>{Metadata::GetUserFlag("RadGuessU")});
+    auto P_guess = md->PackVariables(std::vector<MetadataFlag>{Metadata::GetUserFlag("RadGuessP")});
     // Get Loop Bounds
     const IndexRange ib = mdudt->GetBoundsI(IndexDomain::interior);
     const IndexRange jb = mdudt->GetBoundsJ(IndexDomain::interior);
     const IndexRange kb = mdudt->GetBoundsK(IndexDomain::interior);
-    const IndexRange block = IndexRange{0, dUdt.GetDim(5) - 1};
+    const IndexRange block = IndexRange{0, dU.GetDim(5) - 1};
 
-    // KOKKOS loop over the meshblock, applying the radiation four-force source term to both the fluid and radiation conserved variables.
-    pmb0->par_for("add_radM1_source", block.s, block.e, kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
+    pmb0->par_for("Implicit_Gnu_calculation", block.s, block.e, kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
         KOKKOS_LAMBDA (const int& b, const int &k, const int &j, const int &i) {
-            
-            const auto& G = dUdt.GetCoords(b);
-            Real gdet = G.gdet(Loci::center, j, i); 
-            
-            // Read necessary primitive variables for calculating absorption terms
+            GReal local_Gnu_gdet[GR_DIM];
 
-            // We are gonna follow Mckinney et al. 2014 paper Eq. 16
-            // For this we need R^\mu_\nu, u^\nu, and the opacities. The conserved radiation variables are R^t_t and R^t_i
-            // To reconstruct the full R^\mu_\nu tensor, we need to reconstruct the primitives (E,F^i) and then use the M1 closure to get R^\mu_\nu by using
+            int proceed_with_implicit = SetImplicitInitialGuess( 
+                G, m_p, m_u, U(b), U_guess(b), P_guess(b), dU(b), dt, k, j, i, local_Gnu_gdet, iter_max, err_tol, gam
+            );
 
-    
-            // Reconstruct Radiation Stress-Energy Tensor R^{mu, nu} 
-            // For the M1 scheme, we assume the radiation is isotropic and satisfies the Eddington approximation (P^{ij} = (1/3) E delta^{ij} in the fluid frame)
-            // but in the radiation frame. Therefore, \bar{R}^{tt} = E, \bar{R}^{ii} = \bar{E}/3, and every other component is zero. 
-            // So we have Equation 27 in Sadowski et al. 2013 in the radiation rest frame, but since it's covariant, it's valid for every other frame (including lab frame).
-            // The equation goes as follows:
-            // R^{mu nu} = (4/3) \bar{E} u_R^mu u_R^nu + (1/3) \bar{E} g^{mu nu}, \bar{E} is always in the radiation rest frame.
-
-            // Get R^{t\mu} from R^t_\mu by doing R^{t\mu} = g^{t\nu} R_{\nu\mu} (using the raise function from Kharma)
-            // (ASK BEN), are these terms multiplying sqrt(-g) and is this the right way to access them?
-            // This is R^t_\mu
-            Real R_t_cov[GR_DIM] ={ U(b, m_u.UU_RAD, k, j, i)/gdet, 
-                                     U(b, m_u.U1_RAD, k, j, i)/gdet, 
-                                     U(b, m_u.U2_RAD, k, j, i)/gdet, 
-                                     U(b, m_u.U3_RAD, k, j, i)/gdet}; 
-
-            // This is R^{t\mu}
-            Real R_t_con[GR_DIM];
-            G.raise(R_t_cov, R_t_con, k, j, i, Loci::center);
-
-            //Do g_\mu\nu R^{t\nu} R^{t\mu} and call it invariant_scalar
-            Real invariant_scalar = 0.0;
-            for(int mu=0; mu<4; ++mu) {
-                for(int nu=0; nu<4; ++nu) {
-                    invariant_scalar += G.gcov(Loci::center, j, i, mu, nu) * R_t_con[mu] * R_t_con[nu];
-                }
+            if(proceed_with_implicit) {
+                // Refine Gnu using the implicit solver.
+                ImplicitSolver(G, m_p, m_u, P_guess(b), U_guess(b), U(b), dU(b), dt, k, j, i, local_Gnu_gdet, iter_max, err_tol, gam);
             }
 
+            dU(b, m_u.UU, k, j, i) += local_Gnu_gdet[0];
+            dU(b, m_u.U1, k, j, i) += local_Gnu_gdet[1];
+            dU(b, m_u.U2, k, j, i) += local_Gnu_gdet[2];
+            dU(b, m_u.U3, k, j, i) += local_Gnu_gdet[3];
 
-            // Isolaring u^t_R^2 in Equation 33 to find u^t_R in Equation 32 from Sadowski et al. 2013.
-            // It gives g^{tt}\bar{E}^2 - 2 R^{tt} \bar{E} - 3 invariant_scalar = 0
-            // It yields the solution \bar{E} = R^{tt} +- sqrt((R^{tt})^2 + 3 g^tt invariant_scalar) / g^{tt}
-            // We are gonna take the negative root since g^{tt} is negative and we want \bar{E} to be positive.
-            Real g_con_tt = G.gcon(Loci::center, j, i, 0, 0);
-            Real E_bar = (R_t_con[0] - m::sqrt(R_t_con[0]*R_t_con[0] + 3.0 * g_con_tt * invariant_scalar)) / g_con_tt;
-            
-            //then u^t_R = sqrt(1/8 g^{tt} - 9/(8 E_bar^2) * invariant_scalar)
-            Real u_R_t = m::sqrt(0.125 * g_con_tt - 1.125/(E_bar * E_bar) * invariant_scalar);
-
-            // check if any of the values are nan, if so, apply floor to both
-            if(!isfinite(E_bar)) E_bar = 1e-30;
-            if(!isfinite(u_R_t)) u_R_t = 1e-30;
-            // Now calculate the other components of u_R^\mu using Equation 27 from Sadowski et al. 2013, which goes as 
-            // R^{\mu\nu} = 4/3 \bar{E} u_R^\mu u_R^\nu + 1/3 \bar{E} g^{\mu\nu}
-            // I do have R^{t\mu} and R^{tt}, so I can rearrange the equation to find u_R^\mu as follows:
-            // u_R^\mu = (R^{t \nu} - 1/3 \bar{E} g^{t\nu}) / (4/3 \bar{E} u_R^t)
-            Real u_R_con[GR_DIM]; 
-            for(int nu=0; nu<4; ++nu) {
-                u_R_con[nu] = (R_t_con[nu] - (E_bar / 3.0) * G.gcon(Loci::center, j, i, 0, nu)) / ((4.0/3.0) * E_bar * u_R_t);
-            }
-
-
-            // Now calculating the other terms of R^\mu\nu using the same equation
-            // However, we don't need to calculate R^ij, since we have R^tt and R^ti 
-            Real R_uu[GR_DIM - 1][GR_DIM - 1]; // R^ij
-            for(int mu=0; mu<GR_DIM-1; ++mu) {
-                for(int nu=0; nu<GR_DIM-1; ++nu) {
-                    R_uu[mu][nu] = (4.0/3.0) * E_bar * u_R_con[mu+1] * u_R_con[nu+1] + (E_bar / 3.0) * G.gcon(Loci::center, j, i, mu+1, nu+1);
-                }
-            } 
-
-            Real R_uu_complete[GR_DIM][GR_DIM] = {
-                {R_t_con[0], R_t_con[1], R_t_con[2], R_t_con[3]},
-                {R_t_con[1], R_uu[0][0], R_uu[0][1], R_uu[0][2]},
-                {R_t_con[2], R_uu[1][0], R_uu[1][1], R_uu[1][2]},
-                {R_t_con[3], R_uu[2][0], R_uu[2][1], R_uu[2][2]}
-            };
-
-            // Calculate the mixed index R^\mu_\nu
-            Real R_mixed[GR_DIM][GR_DIM] = {0.0}; 
-            for(int mu=0; mu<GR_DIM; ++mu) {
-                for(int nu=0; nu<GR_DIM; ++nu) {
-                    for(int sigma=0; sigma<GR_DIM; ++sigma) {
-                        R_mixed[mu][nu] +=  R_uu_complete[mu][sigma] * G.gcov(Loci::center, j, i, sigma, nu);
-                    }
-                }
-            }
-
-
-            // Here we'll need to calculate Kabs depending on the physical processes involved in the radiation field
-            Real kappa_a = calc_kabs(0.0, 0.0);
-            Real kappa_s = 0.4; // Thomson scattering opacity for electron scattering, for example.
-            Real lambda      = calc_lambda(1.e4);
-
-            // Now we are gonna use equation 16 from Mckinney et al. 2014 to calculate the radiation four-force G_\nu, which goes as
-            // G^\nu = -kappa_a (R^\mu_\nu u^\nu + \lambda u^\mu) - kappa_s (R^\mu_\alpha u^\alpha + R^\alpha_\beta u_\alpha u^\beta u^\mu)
-
-            Real uvec[3];
-            uvec[0] = P(b, m_p.U1, k, j, i);
-            uvec[1] = P(b, m_p.U2, k, j, i);
-            uvec[2] = P(b, m_p.U3, k, j, i);
-
-            Real ucon[GR_DIM];
-            Real ucov[GR_DIM];
-            GRMHD::calc_ucon(G, uvec, k, j, i, Loci::center, ucon);
-            G.lower(ucon, ucov, k, j, i, Loci::center);
-
-            // Calculating the scattering term
-
-            Real Ruu_scalar = 0.0;
-            for(int alpha=0; alpha<GR_DIM; ++alpha) {
-                for(int beta=0; beta<GR_DIM; ++beta) {
-                    Ruu_scalar += R_mixed[alpha][beta] * ucov[alpha] * ucon[beta];
-                }
-            }
-
-            Real G_con[GR_DIM] = {0.0};
-
-            for(int mu=0; mu<GR_DIM; ++mu) {
-                //Calculate the vector projection V^mu = R^mu_nu * u^nu
-                Real Ru_vec = 0.0;
-                for(int nu=0; nu<GR_DIM; ++nu) {
-                    Ru_vec += R_mixed[mu][nu] * ucon[nu];
-                }
-                // Absorption Term: G_abs = -kappa_a * ( V^mu + lambda * u^mu )
-                Real force_abs = -kappa_a * (Ru_vec) + lambda * ucon[mu];
-                //Scattering Term: G_scat = -kappa_s * ( V^mu + S * u^mu )
-                Real force_scatt = -kappa_s * (Ru_vec + Ruu_scalar * ucon[mu]);
-                // Combine
-                G_con[mu] = force_abs + force_scatt;
-            }
-       
-            // I think we need to lower the index here? (ASK BEN)
-            Real G_cov[GR_DIM];
-
-            G.lower(G_con, G_cov, k, j, i, Loci::center);
-            //printf("G_cov: %e %e %e %e\n", G_cov[0], G_cov[1], G_cov[2], G_cov[3]);
-            // G_cov[0]  = 1e-8;
-            // G_cov[1]  = 1e-8;
-            // G_cov[2]  = 1e-8;
-            // G_cov[3]  = 1e-8;
-
-            // // FLUID
-            // dUdt(b, m_u.UU, k, j, i) += gdet * G_cov[0];
-            // dUdt(b, m_u.U1, k, j, i) += gdet * G_cov[1];
-            // dUdt(b, m_u.U2, k, j, i) += gdet * G_cov[2];
-            // dUdt(b, m_u.U3, k, j, i) += gdet * G_cov[3];
-
-            // //RADIATION
-            // dUdt(b, m_u.UU_RAD, k, j, i) -= gdet * G_cov[0];
-            // dUdt(b, m_u.U1_RAD, k, j, i) -= gdet * G_cov[1];
-            // dUdt(b, m_u.U2_RAD, k, j, i) -= gdet * G_cov[2];
-            // dUdt(b, m_u.U3_RAD, k, j, i) -= gdet * G_cov[3];
+            dU(b, m_u.UU_RAD, k, j, i) -= local_Gnu_gdet[0];
+            dU(b, m_u.U1_RAD, k, j, i) -= local_Gnu_gdet[1];
+            dU(b, m_u.U2_RAD, k, j, i) -= local_Gnu_gdet[2];
+            dU(b, m_u.U3_RAD, k, j, i) -= local_Gnu_gdet[3];
         }
     );
 
     return TaskStatus::complete;
 }
 
-
-// TaskStatus RadM1::AddSource(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDomain domain)
-// {
-//     auto pmesh = mdudt->GetMeshPointer();
-//     auto pmb0 = mdudt->GetBlockData(0)->GetBlockPointer();
-
-//     const auto& pars = pmb0->packages.Get("RadM1")->AllParams();
-//     const Real G0 = pars.Get<Real>("const_G0");
-//     const Real G1 = pars.Get<Real>("const_G1");
-//     const Real G2 = pars.Get<Real>("const_G2");
-//     const Real G3 = pars.Get<Real>("const_G3");
-
-//     // Pack Variables
-//     PackIndexMap cons_map;
-//     auto dUdt = mdudt->PackVariables(std::vector<MetadataFlag>{Metadata::Conserved}, cons_map);
-//     const VarMap m_u(cons_map, true);
-
-//     // Get Loop Bounds
-//     const IndexRange ib = mdudt->GetBoundsI(IndexDomain::interior);
-//     const IndexRange jb = mdudt->GetBoundsJ(IndexDomain::interior);
-//     const IndexRange kb = mdudt->GetBoundsK(IndexDomain::interior);
-//     const IndexRange block = IndexRange{0, dUdt.GetDim(5) - 1};
-
-//     // 4. Parallel Loop
-//     pmb0->par_for("add_radM1_source", block.s, block.e, kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
-//         KOKKOS_LAMBDA (const int& b, const int &k, const int &j, const int &i) {
-            
-//             const auto& G = dUdt.GetCoords(b);
-//             Real gdet = G.gdet(Loci::center, j, i); 
-
-//             // Calculate G_nu (Covariant Components)
-//             Real Gnu_lower[GR_DIM] = {0.0};
-//             //calc_Gnu(G0, G1, G2, G3, Gnu_lower);
-
-//             // Apply Source to Gas
-            
-//             // Energy (Component 0)
-//             dUdt(b, m_u.UU, k, j, i) += gdet * Gnu_lower[0];
-
-//             // Momentum (Components 1, 2, 3)
-//             dUdt(b, m_u.U1, k, j, i) += gdet * Gnu_lower[1];
-//             dUdt(b, m_u.U2, k, j, i) += gdet * Gnu_lower[2];
-//             dUdt(b, m_u.U3, k, j, i) += gdet * Gnu_lower[3];
-//         }
-//     );
-
-//     return TaskStatus::complete;
-// }

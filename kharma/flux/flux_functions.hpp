@@ -333,8 +333,8 @@ KOKKOS_FORCEINLINE_FUNCTION void prim_to_flux(const GRCoordinates& G, const Glob
         const Real UU_rad = P(m_p.UU_RAD, k, j, i);
         //Gotta make sure here that D is D_rad
         FourVectors D_rad;
-        GRMHD::calc_4vecs(G, P, m_p, k, j, i, loc, D_rad);
-        RadM1::calc_tensor(UU_rad, D, dir, R);
+        RadM1::calc_4vecs(G, P, m_p, k, j, i, loc, D_rad);
+        RadM1::calc_tensor(UU_rad, D_rad, dir, R);
         // Then calculate the fluxes
         flux(m_u.UU_RAD, k, j, i) = R[0] * gdet;
         flux(m_u.U1_RAD, k, j, i) = R[1] * gdet;
@@ -448,8 +448,9 @@ KOKKOS_FORCEINLINE_FUNCTION void vchar_rad(const GRCoordinates& G, const Local& 
     // radiation sound speed squared will be the min between 1/3 and (4/(3*tau))**2 
     GReal cs2 = m::min(1./3., m::pow(4./(3.*tau), 2.));
 
-    // Check if cs2 < 1./3. or if it's greater than 1
-    clip(cs2, 1./3., 1.);
+    // Check if cs2 < gam - 1. or if it's greater than 1
+    // TODORAD double check 
+    clip(cs2, gam -1., 1.);
 
     GReal cms2 = cs2;
      // Require that speed of wave measured by observer q.ucon is cms2
