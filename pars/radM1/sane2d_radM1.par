@@ -77,7 +77,7 @@ on = true
 
 <radM1>
 on = true
-rad_rho_max = 1e-5
+u_rad_floor = 1e-6 * 0.001
 
 <units> 
 on = true
@@ -91,7 +91,7 @@ flag_verbose = 0
 
 <parthenon/output0>
 file_type = hdf5
-dt = 2.0
+dt = 10.0
 single_precision_output = true
 variables = prims, divB, jcon, fflag, pflag, fofcflag
 

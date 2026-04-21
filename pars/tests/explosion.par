@@ -54,14 +54,11 @@ fix_atmosphere = true
 rho_out = 1e-4
 
 <floors>
-frame = drift
 rho_min_const = 1e-10
 u_min_const = 1e-10
 
 <fofc>
 on = true
-rho_min_const = 1e-10
-u_min_const = 1e-10
 
 <b_field>
 solver = face_ct

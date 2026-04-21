@@ -113,8 +113,11 @@ std::shared_ptr<KHARMAPackage> RadM1::Initialize(ParameterInput *pin, std::share
     pkg->AddField("cons.uvec_rad", m_cons_vector);
 
 
-    Real u_rad_floor = pin->GetOrAddReal("RadM1", "u_rad_floor", 1.e-50);
+    Real u_rad_floor = pin->GetOrAddReal("radM1", "u_rad_floor", 1.e-50);
+    Real u_rad_max_floor = pin->GetOrAddReal("radM1", "u_rad_max_floor", 1.e20);
+
     pkg->AllParams().Add("u_rad_floor", u_rad_floor);
+    pkg->AllParams().Add("u_rad_max_floor", u_rad_max_floor);
 
 
     // 1. The exact number of variables (5 GRMHD + 4 Rad = 9)
@@ -144,6 +147,7 @@ std::shared_ptr<KHARMAPackage> RadM1::Initialize(ParameterInput *pin, std::share
     if (MPIRank0()){
         printf("RadM1 floor Parameters:\n");
         printf("u_rad_floor: %e\n", u_rad_floor);
+        printf("u_rad_max_floor: %e\n", u_rad_max_floor);
         printf("rad_rho_min: %e\n", params.Get<Real>("rad_rho_min"));
         printf("rad_rho_max: %e\n", params.Get<Real>("rad_rho_max"));
         printf("rad_u_min: %e\n", params.Get<Real>("rad_u_min"));
@@ -175,6 +179,7 @@ void RadM1::ApplyRadM1Floors(MeshBlockData<Real> *rc, IndexDomain domain)
     auto& params = pmb->packages.Get("RadM1")->AllParams();
 
     const Real erad_floor   = params.Get<Real>("u_rad_floor");
+    const Real erad_max_floor = params.Get<Real>("u_rad_max_floor");
     const Real erad_rho_min = params.Get<Real>("rad_rho_min");
     const Real erad_rho_max = params.Get<Real>("rad_rho_max");
     const Real erad_u_min   = params.Get<Real>("rad_u_min");

@@ -328,9 +328,8 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                 }
 
                 // If we recovered the velocity, mark we used the gamma ceiling
-                // TODO real fflag for this
                 if (pflagl == static_cast<int>(Inverter::Status::floor)) {
-                    fflagl |= Floors::FFlag::GAMMA;
+                    fflagl |= Floors::FFlag::INVERTER_GAMMA;
                     pflagl = static_cast<int>(Inverter::Status::success);
                 // If we failed to recover the velocity, optionally zero it here
                 // otherwise it will just get set to atmosphere later
