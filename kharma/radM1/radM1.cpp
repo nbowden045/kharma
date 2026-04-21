@@ -62,7 +62,6 @@ std::shared_ptr<KHARMAPackage> RadM1::Initialize(ParameterInput *pin, std::share
     // I believe this is the boolean to determine whether we are doing an implicit evolution of the radiation field, but I haven't tested it yet.
     // It checks if the driver is imex and if the user has set RadM1/implicit = true in the input file.
     // I think in general we want implicit evolution of the radiation field? Can we have a smarter method than just setting them all to implicit? Maybe check Mckinney et al 2014
-    // (ASK BEN)
     bool implicit_radm1 = (driver_type == DriverType::imex && pin->GetOrAddBoolean("RadM1", "implicit", false));
 
     // Based on the previous boolean, we set the appropriate evolution flag for the radiation variables.
@@ -112,31 +111,32 @@ std::shared_ptr<KHARMAPackage> RadM1::Initialize(ParameterInput *pin, std::share
     auto m_cons_vector = Metadata(flags_cons_vec, s_vector);
     pkg->AddField("cons.uvec_rad", m_cons_vector);
 
+    // Get the total number of variables you need to store.
+    // This is the sum of the fluid and radiation variables (ask cora how to do it properly without hardcoding)
+    int nvar = 12; 
+
+    parthenon::Metadata::AddUserFlag("RadGuessU");
+    parthenon::Metadata::AddUserFlag("RadGuessP");
+    //Define the custom User Flags
+    MetadataFlag flag_guess_u = Metadata::GetUserFlag("RadGuessU");
+    MetadataFlag flag_guess_p = Metadata::GetUserFlag("RadGuessP");
+
+    //Create the flags
+    std::vector<MetadataFlag> flags_u_guess = {Metadata::Cell, Metadata::Derived, flag_guess_u};
+    std::vector<MetadataFlag> flags_p_guess = {Metadata::Cell, Metadata::Derived, flag_guess_p};
+
+    // Add the fields to the package. 
+    pkg->AddField("U_guess", Metadata(flags_u_guess, std::vector<int>({nvar})));
+    pkg->AddField("P_guess", Metadata(flags_p_guess, std::vector<int>({nvar})));
 
     Real u_rad_floor = pin->GetOrAddReal("radM1", "u_rad_floor", 1.e-50);
     Real u_rad_max_floor = pin->GetOrAddReal("radM1", "u_rad_max_floor", 1.e20);
 
     pkg->AllParams().Add("u_rad_floor", u_rad_floor);
     pkg->AllParams().Add("u_rad_max_floor", u_rad_max_floor);
+   
 
-
-    // 1. The exact number of variables (5 GRMHD + 4 Rad = 9)
-    // This ensures your guess vector is exactly the size of your physics.
-    int nv = 9; 
-
-    // 2. Define custom flags so they don't mix with standard physics
-    MetadataFlag rad_guess_p = Metadata::GetUserFlag("RadGuessP");
-    MetadataFlag rad_guess_u = Metadata::GetUserFlag("RadGuessU");
-
-    // 3. Register the fields. 
-    // Note: The shape {nv} MUST go inside the Metadata constructor braces.
-    Metadata m_p_guess({Metadata::Independent, rad_guess_p}, std::vector<int>{nv});
-    pkg->AddField("RadM1.p_guess", m_p_guess);
-
-    Metadata m_u_guess({Metadata::Independent, rad_guess_u}, std::vector<int>{nv});
-    pkg->AddField("RadM1.u_guess", m_u_guess);
-
-    // New Ratio Parameters (matching your legacy code)
+    // New Ratio Parameters (matching my legacy code)
     // Default values are placeholders; you should set reasonable defaults or require them in input.
     pkg->AllParams().Add("rad_rho_min", pin->GetOrAddReal("radM1", "rad_rho_min", 1.e-20));
     pkg->AllParams().Add("rad_rho_max", pin->GetOrAddReal("radM1", "rad_rho_max", 1.e20));
@@ -544,7 +544,7 @@ KOKKOS_INLINE_FUNCTION int SetImplicitInitialGuess(
     //Radiation errors
     Real total_rad_error = 0.0;
 
-    // --- Final Error Check ---
+    //Final error
     Real total_error = total_gas_error + total_rad_error;
     
 
