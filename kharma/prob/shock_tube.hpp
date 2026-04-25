@@ -31,6 +31,7 @@ TaskStatus InitializeShockTube(std::shared_ptr<MeshBlockData<Real>>& rc, Paramet
     const Real u2R = pin->GetOrAddReal("shock", "u2R", 0.0);
     const Real u3L = pin->GetOrAddReal("shock", "u3L", 0.0);
     const Real u3R = pin->GetOrAddReal("shock", "u3R", 0.0);
+    
 
     const Real B1L = pin->GetOrAddReal("shock", "B1L", 0.0);
     const Real B1R = pin->GetOrAddReal("shock", "B1R", 0.0);
@@ -39,6 +40,17 @@ TaskStatus InitializeShockTube(std::shared_ptr<MeshBlockData<Real>>& rc, Paramet
     const Real B3L = pin->GetOrAddReal("shock", "B3L", 0.0);
     const Real B3R = pin->GetOrAddReal("shock", "B3R", 0.0);
 
+
+    // Out of the package modification RADM1.
+    const bool use_rad = pmb->packages.AllPackages().count("RadM1");
+
+    //Setup initial EL and ER for the radiation energy density
+    GridScalar erad = rc->Get("prims.rho").data; // this is a place holder, such that it doesn't cause a segfault.
+    const Real EL = pin->GetOrAddReal("shock", "EL", 0.0);
+    const Real ER = pin->GetOrAddReal("shock", "ER", 0.0);
+    if(use_rad){
+        erad = rc->Get("prims.u_rad").data;
+    }
     IndexDomain domain = IndexDomain::entire;
     IndexRange ib = pmb->cellbounds.GetBoundsI(domain);
     IndexRange jb = pmb->cellbounds.GetBoundsJ(domain);
@@ -68,6 +80,9 @@ TaskStatus InitializeShockTube(std::shared_ptr<MeshBlockData<Real>>& rc, Paramet
             uvec(0, k, j, i) = (lhs) ? u1L : u1R;
             uvec(1, k, j, i) = (lhs) ? u2L : u2R;
             uvec(2, k, j, i) = (lhs) ? u3L : u3R;
+            if(use_rad){
+                erad(k, j, i) = (lhs) ? EL : ER;
+            }
         }
     );
 

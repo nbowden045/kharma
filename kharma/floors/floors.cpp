@@ -217,11 +217,6 @@ TaskStatus Floors::ApplyInitialFloors(ParameterInput *pin, MeshBlockData<Real> *
             int fflag = determine_floors(G, P, m_p, gam, k, j, i, floors, floors, rhoflr_max, uflr_max);
             if (fflag) {
                 apply_floors<InjectionFrame::fluid>(G, P, m_p, gam, k, j, i, rhoflr_max, uflr_max, U, m_u);
-
-                // Out of the package modification RADM1.
-                // if(use_rad){
-                //     apply_floors_radM1<InjectionFrame::fluid>(G, P, m_p, gam, k, j, i, rhoflr_max, uflr_max, U, m_u);
-                // }
                 
                 apply_ceilings(G, P, m_p, gam, k, j, i, floors, floors, U, m_u);
                 // P->U for any modified zones
@@ -229,6 +224,17 @@ TaskStatus Floors::ApplyInitialFloors(ParameterInput *pin, MeshBlockData<Real> *
             }
         }
     );
+
+    // Out of the package modification RADM1.
+    // Apply RadM1 floors after GRMHD is completely done.
+    if (use_rad) {
+        RadM1::ApplyRadM1Floors(mbd, domain);
+        
+        // Because ApplyRadM1Floors only modifies Primitive variables (P),
+        // you MUST sync the modified Primitives back to Conserved variables (U) here.
+        // If you have a function like RadM1::BlockPtoU, call it now!
+        RadM1::BlockUtoP(mbd, domain, false);
+    }
 
     EndFlag();
     return TaskStatus::complete;

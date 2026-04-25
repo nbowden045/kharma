@@ -45,6 +45,7 @@
 
 namespace RadM1 {
 
+TaskStatus BlockPtoU(MeshBlockData<Real> *rc, IndexDomain domain, bool coarse = false);
 /**
  * Initialize the radM1 package with several options from the input deck
  */
@@ -124,8 +125,111 @@ KOKKOS_INLINE_FUNCTION void calc_4vecs(const GRCoordinates& G, const Local& P, c
 KOKKOS_INLINE_FUNCTION void calc_tensor(const Real& UU_rad, const FourVectors& D, const int dir, Real mhd_rad[GR_DIM])
 {
    DLOOP1 {
-        // mhd_rad[mu] = (4.0/3.0) * UU_rad * D.ucon[dir] * D.ucov[mu] + (1.0/3.0) * UU_rad * (dir == mu ? 1.0 : 0.0);
         mhd_rad[mu] = (4.0/3.0) * UU_rad * D.ucon[dir] * D.ucov[mu] + (1.0/3.0) * UU_rad * (dir == mu ? 1.0 : 0.0);
+    }
+}
+
+
+KOKKOS_INLINE_FUNCTION void calc_tensor_m1(const GRCoordinates& G, const VariablePack<Real>& P, const VarMap& m_p, const FourVectors D_gas, const int& dir, const int& k, const int& j, const int& i, const Loci loc, Real R_dir_mu[GR_DIM])
+{
+    // Extract primitive variables using 3D indices (k, j, i)
+    Real E_hat = P(m_p.UU_RAD, k, j, i);
+    Real F_space[3] = { 
+        P(m_p.U1_RAD, k, j, i), 
+        P(m_p.U2_RAD, k, j, i), 
+        P(m_p.U3_RAD, k, j, i) 
+    };
+
+    // Reconstruct full 4-vector Flux F^\mu
+    Real F_con[GR_DIM];
+    F_con[1] = F_space[0]; 
+    F_con[2] = F_space[1]; 
+    F_con[3] = F_space[2];
+    F_con[0] = -(F_con[1]*D_gas.ucov[1] + F_con[2]*D_gas.ucov[2] + F_con[3]*D_gas.ucov[3]) / D_gas.ucov[0];
+
+    Real F_cov[GR_DIM];
+    for(int mu=0; mu<4; ++mu) {
+        F_cov[mu] = 0.0;
+        // KHARMA metric functions only require j, i (axisymmetry)
+        for(int nu=0; nu<4; ++nu) F_cov[mu] += G.gcov(loc, j, i, mu, nu) * F_con[nu];
+    }
+
+    Real F_sq = 0.0;
+    for(int mu=0; mu<4; ++mu) F_sq += F_con[mu] * F_cov[mu];
+    F_sq = m::max(F_sq, 0.0);
+
+    // Eddington Factor
+    Real f_rad = (E_hat > 1e-250) ? m::min(m::sqrt(F_sq) / E_hat, 1.0) : 0.0;
+    Real f_rad_sq = f_rad * f_rad;
+    Real edd_f = (3.0 + 4.0 * f_rad_sq) / (5.0 + 2.0 * m::sqrt(m::max(4.0 - 3.0 * f_rad_sq, 0.0)));
+
+    // Build the specific row of R^{\mu\nu} for the flux direction
+    Real R_con_dir[GR_DIM]; 
+    for(int nu=0; nu<4; ++nu) {
+        Real P_con = E_hat * (1.0 / 3.0) * (G.gcon(loc, j, i, dir, nu) + D_gas.ucon[dir] * D_gas.ucon[nu]);
+        if (F_sq > 1e-250) {
+            P_con = E_hat * ( 
+                ((3.0 * edd_f - 1.0) / 2.0) * (G.gcon(loc, j, i, dir, nu) + D_gas.ucon[dir] * D_gas.ucon[nu]) + 
+                ((3.0 * (1.0 - edd_f)) / 2.0) * (F_con[dir] * F_con[nu] / F_sq) 
+            );
+        }
+        R_con_dir[nu] = E_hat * D_gas.ucon[dir] * D_gas.ucon[nu] + 
+                        F_con[dir] * D_gas.ucon[nu] + F_con[nu] * D_gas.ucon[dir] + P_con;
+    }
+
+    // Lower one index to get R^{dir}_\mu
+    for(int mu=0; mu<4; ++mu) {
+        R_dir_mu[mu] = 0.0;
+        for(int nu=0; nu<4; ++nu) R_dir_mu[mu] += G.gcov(loc, j, i, mu, nu) * R_con_dir[nu];
+    }
+}
+
+
+
+template <typename Local>
+KOKKOS_INLINE_FUNCTION void calc_tensor_m1(const GRCoordinates& G, const Local& P, const VarMap& m_p, const FourVectors D_gas, const int& dir, const int& j, const int& i, const Loci loc, Real R_dir_mu[GR_DIM])
+{
+    Real E_hat = P(m_p.UU_RAD);
+    Real F_space[3] = { P(m_p.U1_RAD), P(m_p.U2_RAD), P(m_p.U3_RAD) };
+
+    //Reconstruct full 4-vector Flux F^\mu
+    Real F_con[GR_DIM];
+    F_con[1] = F_space[0]; F_con[2] = F_space[1]; F_con[3] = F_space[2];
+    F_con[0] = -(F_con[1]*D_gas.ucov[1] + F_con[2]*D_gas.ucov[2] + F_con[3]*D_gas.ucov[3]) / D_gas.ucov[0];
+
+    Real F_cov[GR_DIM];
+    for(int mu=0; mu<4; ++mu) {
+        F_cov[mu] = 0.0;
+        for(int nu=0; nu<4; ++nu) F_cov[mu] += G.gcov(loc, j, i, mu, nu) * F_con[nu];
+    }
+
+    Real F_sq = 0.0;
+    for(int mu=0; mu<4; ++mu) F_sq += F_con[mu] * F_cov[mu];
+    F_sq = m::max(F_sq, 0.0);
+
+    //Eddington Factor
+    Real f_rad = (E_hat > 1e-250) ? m::min(m::sqrt(F_sq) / E_hat, 1.0) : 0.0;
+    Real f_rad_sq = f_rad * f_rad;
+    Real edd_f = (3.0 + 4.0 * f_rad_sq) / (5.0 + 2.0 * m::sqrt(m::max(4.0 - 3.0 * f_rad_sq, 0.0)));
+
+    // Build the specific row of R^{\mu\nu} for the flux direction
+    Real R_con_dir[GR_DIM]; 
+    for(int nu=0; nu<4; ++nu) {
+        Real P_con = E_hat * (1.0 / 3.0) * (G.gcon(loc, j, i, dir, nu) + D_gas.ucon[dir] * D_gas.ucon[nu]);
+        if (F_sq > 1e-250) {
+            P_con = E_hat * ( 
+                ((3.0 * edd_f - 1.0) / 2.0) * (G.gcon(loc, j, i, dir, nu) + D_gas.ucon[dir] * D_gas.ucon[nu]) + 
+                ((3.0 * (1.0 - edd_f)) / 2.0) * (F_con[dir] * F_con[nu] / F_sq) 
+            );
+        }
+        R_con_dir[nu] = E_hat * D_gas.ucon[dir] * D_gas.ucon[nu] + 
+                        F_con[dir] * D_gas.ucon[nu] + F_con[nu] * D_gas.ucon[dir] + P_con;
+    }
+
+    // Lower one index to get R^{dir}_\mu
+    for(int mu=0; mu<4; ++mu) {
+        R_dir_mu[mu] = 0.0;
+        for(int nu=0; nu<4; ++nu) R_dir_mu[mu] += G.gcov(loc, j, i, mu, nu) * R_con_dir[nu];
     }
 }
 

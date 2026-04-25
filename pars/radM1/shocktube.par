@@ -5,8 +5,8 @@ problem_id = shock
 
 <parthenon/mesh>
 nx1 = 400
-x1min = 0.0
-x1max = 1.0
+x1min = -10.0
+x1max = 10.0
 
 nx2 = 1
 x2min = 0.0
@@ -24,42 +24,39 @@ nx3 = 1
 <coordinates>
 base = cartesian_minkowski
 transform = null
+correct_connections = true
 
 <parthenon/time>
-tlim = 1.0
+tlim = 100.0
 integrator = rk2
 dt_min = 0.0001
 
 <GRMHD>
-cfl = 0.9
+cfl = 0.1
 gamma = 1.666667
 reconstruction = weno5
 
 <b_field>
 solver = none
 
-<electrons>
-on = true
-constant = true
-gamma_e = 1.666667
-fel_0 = 0.0
-fel_constant = 0.5
 
 <shock>
 rhoL = 1.
-PL = 0.01
-u1L = 0.5
+PL = 3e-5
+u1L = 0.015
+EL = 1e-8
 
-rhoR = 1.
-PR = 0.01
-u1R = -0.5
+rhoR = 2.4
+PR = 1.61e-4
+u1R = -6.25e-3
+ER = 2.51e-7
 
 <floors>
 disable_floors = true
 
 <parthenon/output0>
 file_type = hdf5
-dt = 0.1
+dt = 5.0
 single_precision_output = true
 variables = prims
 
@@ -67,11 +64,17 @@ variables = prims
 file_type = hst
 dt = 0.1
 
+<debug>
+verbose = 1
+extra_checks = 2
+flag_verbose = 1
 
 
 <radM1>
 on = true
-u_rad_floor = 1e-6 * 0.001
+kappa_ep = 0.4
+sigma = 3.085e9
+
 
 <units> 
 on = true

@@ -77,12 +77,12 @@ on = true
 
 <radM1>
 on = true
-u_rad_floor = 1e-6 * 0.001
+u_rad_floor = 1.e-8
 
 <units> 
 on = true
-M_BH = 100
-rho_scale = 1e-4
+M_BH = 10
+rho_scale = 1e-6
 
 <debug>
 verbose = 1
