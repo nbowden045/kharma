@@ -288,20 +288,11 @@ void init_GRCoordinates(GRCoordinates& G) {
                     GReal dS_k = D_k - C_k;
 
                     DLOOP1 {
-                        // Re-calculate local Gamma value
                         GReal Gam_val = gdet_conn_local(j, i, mu, mu, lam) / gdet_c;
-                        
-                        // Calculate weight
                         GReal W_kmu = m::abs(Gam_val) / S_k;
-                        
-                        // Calculate correction for Gamma
                         GReal Delta_Gamma = dS_k * W_kmu;
-                        
-                        // Apply to storage (multiply by gdet_c because we store gdet*Gamma)
                         GReal correction_term = Delta_Gamma * gdet_c;
-
                         gdet_conn_local(j, i, mu, mu, lam) += correction_term;
-
                         // Enforce symmetry of Christoffel symbols: Gamma^mu_lam_nu = Gamma^mu_nu_lam
                         // We correct Gamma^mu_mu_lam and Gamma^mu_lam_mu identicaly
                         gdet_conn_local(j, i, mu, lam, mu) = gdet_conn_local(j, i, mu, mu, lam);

@@ -174,7 +174,7 @@ KOKKOS_FORCEINLINE_FUNCTION void prim_to_flux(const GRCoordinates& G, const Loca
         Real R_dir_mu[GR_DIM];
         
         // Use the new M1 tensor function. Note we pass the GAS velocity 'D' here!
-        RadM1::calc_tensor_m1(G, P, m_p, D, dir, j, i, loc, R_dir_mu);
+        RadM1::calc_tensor_m1(G, P, m_p, dir, j, i, loc, R_dir_mu);
 
         // Then calculate the fluxes
         flux(m_u.UU_RAD) = R_dir_mu[0] * gdet;
@@ -266,7 +266,7 @@ KOKKOS_FORCEINLINE_FUNCTION void prim_to_flux(const GRCoordinates& G, const Glob
         Real R_dir_mu[GR_DIM];
         
         // Use the new M1 tensor function. Note we pass the GAS velocity 'D' here!
-        RadM1::calc_tensor_m1(G, P, m_p, D, dir, k, j, i, loc, R_dir_mu);
+        RadM1::calc_tensor_m1(G, P, m_p, dir, k, j, i, loc, R_dir_mu);
 
         // Then calculate the fluxes
         flux[m_u.UU_RAD] = R_dir_mu[0] * gdet;
@@ -357,8 +357,8 @@ KOKKOS_FORCEINLINE_FUNCTION void prim_to_flux(const GRCoordinates& G, const Glob
         Real R_dir_mu[GR_DIM];
         
         // Use the new M1 tensor function. Note we pass the GAS velocity 'D' here!
-        RadM1::calc_tensor_m1(G, P, m_p, D, dir, k, j, i, loc, R_dir_mu);
-
+        RadM1::calc_tensor_m1(G, P, m_p, dir, k, j, i, loc, R_dir_mu);
+        
         // Then calculate the fluxes
         flux(m_u.UU_RAD, k, j, i) = R_dir_mu[0] * gdet;
         flux(m_u.U1_RAD, k, j, i) = R_dir_mu[1] * gdet;

@@ -212,102 +212,86 @@ TaskStatus RadM1::BlockPtoU(MeshBlockData<Real> *rc, IndexDomain domain, bool co
     // Parallel Loop
     pmb->par_for("RadM1_PtoU", b.ks, b.ke, b.js, b.je, b.is, b.ie,
         KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
-            
-            Real gdet = G.gdet(Loci::center, j, i);
 
-            // 1. Read Radiation Primitives
-            Real E_hat = P(m_p.UU_RAD, k, j, i);
-            Real F_space[3] = {
-                P(m_p.U1_RAD, k, j, i), 
-                P(m_p.U2_RAD, k, j, i), 
-                P(m_p.U3_RAD, k, j, i)
-            };
+        Real Erf = P(m_p.UU_RAD, k, j, i);
+        Real uvec_radframe[4] = {0, P(m_p.U1_RAD, k, j, i), P(m_p.U2_RAD, k, j, i), P(m_p.U3_RAD, k, j, i)};
+        const Real gamma = GRMHD::lorentz_calc(G, uvec_radframe, k, j, i, Loci::center);
+        Real ucon_rad[GR_DIM];
+        GRMHD::calc_ucon(G, uvec_radframe, k, j, i, Loci::center, ucon_rad);
 
-            // 2. Calculate Gas 4-Velocity (u_gas)
-            Real uvec_gas[3] = {
-                P(m_p.U1, k, j, i), 
-                P(m_p.U2, k, j, i), 
-                P(m_p.U3, k, j, i)
-            };
-            Real ucon_gas[GR_DIM], ucov_gas[GR_DIM];
-            GRMHD::calc_ucon(G, uvec_gas, k, j, i, Loci::center, ucon_gas);
-            G.lower(ucon_gas, ucov_gas, k, j, i, Loci::center);
+        // R^t^mu
+        Real R_t_con[GR_DIM];
 
-            // 3. Reconstruct full 4-vector Flux F^\mu
-            // F^\mu is orthogonal to gas velocity: F^\mu u_\mu = 0
-            // So, F^t = -(F^1 u_1 + F^2 u_2 + F^3 u_3) / u_t
-            Real F_con[GR_DIM];
-            F_con[1] = F_space[0];
-            F_con[2] = F_space[1];
-            F_con[3] = F_space[2];
-            F_con[0] = -(F_con[1]*ucov_gas[1] + F_con[2]*ucov_gas[2] + F_con[3]*ucov_gas[3]) / ucov_gas[0];
-
-            Real F_cov[GR_DIM];
-            G.lower(F_con, F_cov, k, j, i, Loci::center);
-
-            // Calculate magnitude squared of the flux |F|^2 = F^\mu F_\mu
-            Real F_sq = 0.0;
-            for(int mu=0; mu<4; ++mu) {
-                F_sq += F_con[mu] * F_cov[mu];
-            }
-            F_sq = m::max(F_sq, 0.0); // Safety against small negative numerical errors
-
-            // 4. Calculate Dimensionless Flux (f_rad) and Eddington Factor (f)
-            Real f_rad = 0.0;
-            if (E_hat > 1e-250) {
-                f_rad = m::sqrt(F_sq) / E_hat;
-            }
-            // Causality limit: radiation flux cannot exceed energy density (f_rad <= 1)
-            f_rad = m::min(f_rad, 1.0); 
-
-            Real f_rad_sq = f_rad * f_rad;
-            // Sadowski 2013 Eq 18
-            Real edd_f = (3.0 + 4.0 * f_rad_sq) / (5.0 + 2.0 * m::sqrt(m::max(4.0 - 3.0 * f_rad_sq, 0.0)));
-
-            // 5. Build the Radiation Stress-Energy Tensor R^{\mu\nu}
-            Real R_con[GR_DIM][GR_DIM];
-            for(int mu=0; mu<4; ++mu) {
-                for(int nu=0; nu<4; ++nu) {
-                    
-                    // Build Pressure Tensor P^{\mu\nu} (Sadowski Eq 17)
-                    Real P_con = 0.0;
-                    if (F_sq > 1e-250) {
-                        P_con = E_hat * ( 
-                            ((3.0 * edd_f - 1.0) / 2.0) * (G.gcon(Loci::center, j, i, mu, nu) + ucon_gas[mu] * ucon_gas[nu]) + 
-                            ((3.0 * (1.0 - edd_f)) / 2.0) * (F_con[mu] * F_con[nu] / F_sq) 
-                        );
-                    } else {
-                        // Isotropic limit: if flux is zero, f -> 1/3, second term vanishes
-                        P_con = E_hat * (1.0 / 3.0) * (G.gcon(Loci::center, j, i, mu, nu) + ucon_gas[mu] * ucon_gas[nu]);
-                    }
-
-                    // Assemble R^{\mu\nu} (Sadowski Eq 15)
-                    R_con[mu][nu] = E_hat * ucon_gas[mu] * ucon_gas[nu] + 
-                                    F_con[mu] * ucon_gas[nu] + 
-                                    F_con[nu] * ucon_gas[mu] + 
-                                    P_con;
-                }
-            }
-
-            // 6. Lower one index to get R^t_\mu (Mixed Tensor)
-            // R^t_\mu = g_{\mu\nu} R^{t\nu}
-            Real R_t_mu[GR_DIM] = {0.0};
-            for(int mu=0; mu<4; ++mu) {
-                for(int nu=0; nu<4; ++nu) {
-                    R_t_mu[mu] += G.gcov(Loci::center, j, i, mu, nu) * R_con[0][nu];
-                }
-            }
-
-            // 7. Save to Conserved Variables (multiply by gdet)
-            U(0, k, j, i) = R_t_mu[0] * gdet; // cons.u_rad
-            U(1, k, j, i) = R_t_mu[1] * gdet; // cons.uvec_rad 1
-            U(2, k, j, i) = R_t_mu[2] * gdet; // cons.uvec_rad 2
-            U(3, k, j, i) = R_t_mu[3] * gdet; // cons.uvec_rad 3
+        for (int mu=0; mu<GR_DIM; ++mu) {
+            R_t_con[mu] = 4./3. * Erf * ucon_rad[0] * ucon_rad[mu] + 1./3. * Erf * G.gcon(Loci::center, j, i, 0, mu);
         }
-    );
 
+        // Calculat R^t_mu
+        Real R_t_cov[GR_DIM];
+        G.lower(R_t_con, R_t_cov, k, j, i, Loci::center);
+
+        U(0, k, j, i) = R_t_cov[0] * G.gdet(Loci::center, j, i); // cons.u_rad
+        U(1, k, j, i) = R_t_cov[1] * G.gdet(Loci::center, j, i); // cons.uvec_rad 1
+        U(2, k, j, i) = R_t_cov[2] * G.gdet(Loci::center, j, i); // cons.uvec_rad 2
+        U(3, k, j, i) = R_t_cov[3] * G.gdet(Loci::center, j, i); // cons.uvec_rad 3
+    });
     return TaskStatus::complete;
 }
+
+KOKKOS_INLINE_FUNCTION double CalculateGammaRel2(const GRCoordinates& G, const Real R_t_cov[GR_DIM], const Real invariant_scalar, const int& j, const int& i) {
+    Real gcon_tt = G.gcon(Loci::center, j, i, 0, 0);
+    Real R_t_t = R_t_cov[0];
+    
+    // Time-Space cross term: g^{ti} R^t_i
+    Real dot_t_i = G.gcon(Loci::center, j, i, 0, 1) * R_t_cov[1] +
+                   G.gcon(Loci::center, j, i, 0, 2) * R_t_cov[2] +
+                   G.gcon(Loci::center, j, i, 0, 3) * R_t_cov[3];
+
+    // Purely Spatial term: g^{ij} R^t_i R^t_j
+    Real dot_spatial = G.gcon(Loci::center, j, i, 1, 1) * (R_t_cov[1] * R_t_cov[1]) +
+                   2.0 * G.gcon(Loci::center, j, i, 1, 2) * (R_t_cov[1] * R_t_cov[2]) +
+                         G.gcon(Loci::center, j, i, 2, 2) * (R_t_cov[2] * R_t_cov[2]) +
+                   2.0 * G.gcon(Loci::center, j, i, 1, 3) * (R_t_cov[1] * R_t_cov[3]) +
+                   2.0 * G.gcon(Loci::center, j, i, 2, 3) * (R_t_cov[2] * R_t_cov[3]) +
+                         G.gcon(Loci::center, j, i, 3, 3) * (R_t_cov[3] * R_t_cov[3]);
+
+    // Calculate Roots for (u^t_R)^2
+    Real radical_inside = 4.0 * (gcon_tt * gcon_tt) * (R_t_t * R_t_t)
+                        + (dot_t_i * dot_t_i)
+                        + gcon_tt * (8.0 * R_t_t * dot_t_i + 3.0 * dot_spatial);
+    Real radical = m::sqrt(m::max(0.0, radical_inside)); 
+
+    Real num_a = 2.0 * (gcon_tt * gcon_tt) * (R_t_t * R_t_t)
+                + dot_t_i * (dot_t_i + radical)
+                + gcon_tt * (4.0 * R_t_t * dot_t_i + dot_spatial + R_t_t * radical);
+
+    Real num_b = -2.0 * (gcon_tt * gcon_tt) * (R_t_t * R_t_t)
+                - gcon_tt * (4.0 * R_t_t * dot_t_i + dot_spatial)
+                + gcon_tt * R_t_t * radical
+                + dot_t_i * (-dot_t_i + radical);
+
+    Real gamma2a = -0.25 * num_a / invariant_scalar;
+    Real gamma2b =  0.25 * num_b / invariant_scalar;
+
+    // Sadowski 2013: Select the largest real root for (u^t)^2
+    Real gamma2 = gamma2a;
+    if (m::isnan(gamma2a) || m::isinf(gamma2a)) {
+        gamma2 = gamma2b;
+    } else if (!m::isnan(gamma2b) && !m::isinf(gamma2b)) {
+        gamma2 = m::max(gamma2a, gamma2b);
+    }
+
+    Real alpha_sq = -1.0 / gcon_tt;
+    Real gammarel2 = gamma2 * alpha_sq; 
+
+    // Hard floor for physical bounds (Lorentz factor squared MUST be >= 1.0)
+    if (gammarel2 < 1.0 || m::isnan(gammarel2)) {
+        gammarel2 = 1.0;
+    }
+    
+    return gammarel2;
+}
+
 
 TaskStatus RadM1::BlockUtoP(MeshBlockData<Real> *rc, IndexDomain domain, bool coarse)
 {
@@ -329,6 +313,8 @@ TaskStatus RadM1::BlockUtoP(MeshBlockData<Real> *rc, IndexDomain domain, bool co
     //Parallel Loop
     pmb->par_for("RadM1_UtoP", b.ks, b.ke, b.js, b.je, b.is, b.ie,
         KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
+
+
             
             Real gdet = G.gdet(Loci::center, j, i);
 
@@ -354,16 +340,6 @@ TaskStatus RadM1::BlockUtoP(MeshBlockData<Real> *rc, IndexDomain domain, bool co
             Real R_t_con[GR_DIM];
             G.raise(R_t_cov, R_t_con, k, j, i, Loci::center);
 
-            //print if any nans in R_t_con, in any of the arrays
-            // if (1) {
-            //     for(int mu=0; mu<4; ++mu) {
-            //         if (m::isnan(R_t_con[mu]) || m::isinf(R_t_con[mu])) {
-            //             printf("NaN or Inf detected in R_t_con at block %d, k=%d, j=%d, i=%d, component %d\n", pmb->gid, k, j, i, mu);
-            //                 return TaskStatus::complete;
-            //         }
-            //     }
-            // }
-
             //Calculate Invariant Scalar S = R^t_mu * R^{t\mu}
             // Real invariant_scalar = 0.0;
             // for(int mu=0; mu<4; ++mu) {
@@ -377,126 +353,42 @@ TaskStatus RadM1::BlockUtoP(MeshBlockData<Real> *rc, IndexDomain domain, bool co
             for(int mu=0; mu<4; ++mu) {
                 invariant_scalar += R_t_cov[mu] * R_t_con[mu];
             }
-            
-            // Isolaring u^t_R^2 in Equation 33 to find u^t_R in Equation 32 from Sadowski et al. 2013.
-            // It gives g^{tt}\bar{E}^2 - 2 R^{tt} \bar{E} - 3 invariant_scalar = 0
-            // It yields the solution \bar{E} = (R^{tt} +- sqrt((R^{tt})^2 + 3 g^tt invariant_scalar) )/ g^{tt}
-            // We are gonna take the negative root since g^{tt} is negative and we want \bar{E} to be positive.
-            Real g_con_tt = G.gcon(Loci::center, j, i, 0, 0);
-            
-            Real discr = R_t_con[0]*R_t_con[0] + 3.0 * g_con_tt * invariant_scalar;
-            GReal E_bar = 0.0;
-            if (discr < 0.0) {
-                // Unphysical state (Flux > Energy), likely due to numerical error
-                // Reset to valid small number
-                 E_bar = 1e-300;
-            } else {
-                // Solve quadratic: E = (R^{tt} - sqrt((R^{tt})^2 + 3 g^{tt} S)) / g^{tt}
-                E_bar = (R_t_con[0] - m::sqrt(discr)) / g_con_tt;
+
+            // From Sadowski et al. Eq 32 and 33
+            // Solving by isolating Isolaring u^t_R^2 results in a much better equation, but I think (and I could be wrong)
+            // that solving by isolating \bar{E} results in a much more numerical stable solution.
+
+            // Calculating u^t_R^2
+            Real gammarel2 = CalculateGammaRel2(G, R_t_cov, invariant_scalar, j, i);
+
+            // Pre-calculate alpha_sq so E_rf can use it
+            Real alpha_sq = -1.0 / G.gcon(Loci::center, j, i, 0, 0); 
+            Real E_rf = (3.0 * R_t_con[0] * alpha_sq) / (4.0 * gammarel2 - 1.0);
+            //There were a lot of checks in this part, so I should test this very carefully.
+            if(E_rf < 0.0 || m::isnan(E_rf) || m::isinf(E_rf)) {
+                printf("Something Happened!, E_rf = %e, R_t_con[0]: %e, alpha_sq %e, gammarel2 %e\n", E_rf, R_t_con[0], alpha_sq, gammarel2);
             }
-
-            if (E_bar <= 0.0 || !m::isfinite(E_bar)) {
-                E_bar = 1e-300;
-            }
-
-            // Recover u^t_R and u^i_R
-            Real u_R_t = 0.0;
-            //then u^t_R = sqrt(1/8 g^{tt} - 9/(8 E_bar^2) * invariant_scalar)
-            Real val_ut = 0.125 * g_con_tt - 1.125/(E_bar * E_bar) * invariant_scalar;
-            
-            if (val_ut < 0.0) {
-                // If velocity solution is invalid, assume static in lab frame or fluid frame
-                // Fallback: simple approximation or fluid velocity
-                u_R_t = m::sqrt(-1.0 / g_con_tt); // u^i = 0
-            } else {
-                u_R_t = m::sqrt(val_ut);
-            }
-
-            // Calculate spatial components u^i_R
-            // Eq: u^\mu = (R^{t\mu} - E/3 g^{t\mu}) / (4/3 E u^t)
-            Real u_R_con[GR_DIM];
-            // Safety for division
-            Real denom = (4.0/3.0) * E_bar * u_R_t;
-            //if (m::abs(denom) < 1e-25) denom = 1e-25;
-
-            u_R_con[0] = u_R_t; // We already found component 0
-            for(int nu=1; nu<4; ++nu) {
-                u_R_con[nu] = (R_t_con[nu] - (E_bar / 3.0) * G.gcon(Loci::center, j, i, 0, nu)) / denom;
-            }
-
-            // Now the entire R^{\mu\nu} can be reconstructed from E_bar and u_R_con using Equation 27 in Sadowski et al. 2013
-
-            Real R_con[GR_DIM][GR_DIM];
+            Real uvec_radframe_con[4];
+            Real alpha = m::sqrt(alpha_sq);
             for(int mu=0; mu<4; ++mu) {
-                for(int nu=0; nu<4; ++nu) {
-                    R_con[mu][nu] = (4.0/3.0) * E_bar * u_R_con[mu] * u_R_con[nu] + (E_bar / 3.0) * G.gcon(Loci::center, j, i, mu, nu);
-                }
-            }
- 
-            // We need to project R^munu onto the fluid 4-velocity u_gas
-            // to get the fluid-frame energy E_hat and flux F_hat.
-
-            //Get the Fluid 4-Velocity (u_gas) from Primitives
-            Real uvec_gas[3] = {
-                P(m_p.U1, k, j, i), 
-                P(m_p.U2, k, j, i), 
-                P(m_p.U3, k, j, i)
-            };
-            
-            Real ucon_gas[GR_DIM], ucov_gas[GR_DIM];
-            // Calculate u^mu (contravariant) and u_mu (covariant) for the gas
-            GRMHD::calc_ucon(G, uvec_gas, k, j, i, Loci::center, ucon_gas);
-            G.lower(ucon_gas, ucov_gas, k, j, i, Loci::center);
-
-            //Calculate Fluid-Frame Energy Density (E_hat)
-            // Projection: E_hat = R^{ab} * u_a * u_b
-            Real E_hat = 0.0;
-            for(int mu=0; mu<4; ++mu) {
-                for(int nu=0; nu<4; ++nu) {
-                    E_hat += R_con[mu][nu] * ucov_gas[mu] * ucov_gas[nu];
-                }
+                uvec_radframe_con[mu] = alpha * (R_t_con[mu] + 1./3. * E_rf * G.gcon(Loci::center, j, i, 0, mu) * (4.0 * gammarel2 - 1.0))/(4./3. * E_rf * sqrt(gammarel2));
             }
 
+            P(m_p.UU_RAD, k, j, i) = E_rf;
+            P(m_p.U1_RAD, k, j, i) = uvec_radframe_con[1];
+            P(m_p.U2_RAD, k, j, i) = uvec_radframe_con[2];
+            P(m_p.U3_RAD, k, j, i) = uvec_radframe_con[3];
 
-            // Calculate Fluid-Frame Flux (F_hat)
-            // First, compute the Momentum Density J^mu = - R^{mu nu} u_nu
-            Real J_con[GR_DIM] = {0.0};
-            for(int mu=0; mu<4; ++mu) {
-                for(int nu=0; nu<4; ++nu) {
-                    J_con[mu] -= R_con[mu][nu] * ucov_gas[nu];
-                }
-            }
-
-            // Project J^mu orthogonal to u_gas to get Flux F^mu
-            // Formula: F^mu = (g^{mu nu} + u^mu u^nu) J_nu
-            // Simplifies to: F^mu = J^mu - (J dot u) * u^mu
-            // Note: (J dot u) is simply -E_hat
-            
-            Real F_con[GR_DIM]; 
-            for(int mu=0; mu<4; ++mu) {
-                F_con[mu] = J_con[mu] - (E_hat * ucon_gas[mu]);
-            }
-
-            if(m::isnan(E_hat) || m::isinf(E_hat)) {
-                printf("Warning! Radiation Inversion Failed!\n");
-                P(m_p.UU_RAD, k, j, i) = P(m_p.UU, k, j, i); // Set to small fraction of E_bar to avoid zero
-                P(m_p.U1_RAD, k, j, i) = 0.0;
-                P(m_p.U2_RAD, k, j, i) = 0.0;
-                P(m_p.U3_RAD, k, j, i) = 0.0;
-            }else{
-                P(m_p.UU_RAD, k, j, i) = E_hat;
-                P(m_p.U1_RAD, k, j, i) = F_con[1];
-                P(m_p.U2_RAD, k, j, i) = F_con[2];
-                P(m_p.U3_RAD, k, j, i) = F_con[3];
-            }
-
-        }
-    );
+    });
     return TaskStatus::complete;
 }
 
 
-// KOKKOS_INLINE_FUNCTION void calc_Gnu(const Real rho, const Real ug, GReal * Gnu_gdet){
+// KOKKOS_INLINE_FUNCTION void calc_Gnu(
+//     const GRCoordinates& G, const VariablePack<Real>& P_guess, const VarMap& m_p, 
+//     const int k, const int j, const int i, 
+//     const Real kappa_ep, const Real sigma, const Real gam, 
+//     GReal* Gnu_gdet) {
 
 //     Gnu_gdet[0] = 0.0; // Energy exchange term
 //     Gnu_gdet[1] = 0.0; // Momentum exchange term in x
@@ -527,10 +419,10 @@ KOKKOS_INLINE_FUNCTION void calc_Gnu(
     // calc_tensor_m1 computes R^{\mu\nu} for a specific direction \mu. 
     // We call it 4 times to fill the whole 4x4 matrix.
     Real R_tensor[4][4];
-    RadM1::calc_tensor_m1(G, P_guess, m_p, D_gas, 0, k, j, i, Loci::center, R_tensor[0]);
-    RadM1::calc_tensor_m1(G, P_guess, m_p, D_gas, 1, k, j, i, Loci::center, R_tensor[1]);
-    RadM1::calc_tensor_m1(G, P_guess, m_p, D_gas, 2, k, j, i, Loci::center, R_tensor[2]);
-    RadM1::calc_tensor_m1(G, P_guess, m_p, D_gas, 3, k, j, i, Loci::center, R_tensor[3]);
+    RadM1::calc_tensor_m1(G, P_guess, m_p, 0, k, j, i, Loci::center, R_tensor[0]);
+    RadM1::calc_tensor_m1(G, P_guess, m_p, 1, k, j, i, Loci::center, R_tensor[1]);
+    RadM1::calc_tensor_m1(G, P_guess, m_p, 2, k, j, i, Loci::center, R_tensor[2]);
+    RadM1::calc_tensor_m1(G, P_guess, m_p, 3, k, j, i, Loci::center, R_tensor[3]);
     
     // Compute G^\mu = - \rho \kappa ( R^{\mu\alpha} u_\alpha + \sigma T^4 u^\mu )
     Real kappa = kappa_ep * rho;

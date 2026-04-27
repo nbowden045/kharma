@@ -82,46 +82,71 @@ KOKKOS_INLINE_FUNCTION Real calc_kscattering(Real rho, Real T) {
 
 
 
-// Planck function for blackbody radiation
-KOKKOS_INLINE_FUNCTION Real calc_lambda(Real T) {
-    const Real sigma_SB = 5.67e-5; // Stefan-Boltzmann constant probably defined somewhere! (ASK BEN) (CGS)
-    return (sigma_SB * T * T * T * T) / M_PI;
+
+
+
+
+// Global Lorentz Factor for Radiation
+template<typename Global>
+KOKKOS_INLINE_FUNCTION Real lorentz_calc_rad(const GRCoordinates& G, const Global& P, const VarMap& m, const int& k, const int& j, const int& i, const Loci loc) {
+    Real qsq = G.gcov(loc, j, i, 1, 1) * P(m.U1_RAD, k, j, i) * P(m.U1_RAD, k, j, i) +
+               G.gcov(loc, j, i, 2, 2) * P(m.U2_RAD, k, j, i) * P(m.U2_RAD, k, j, i) +
+               G.gcov(loc, j, i, 3, 3) * P(m.U3_RAD, k, j, i) * P(m.U3_RAD, k, j, i) +
+               2. * (G.gcov(loc, j, i, 1, 2) * P(m.U1_RAD, k, j, i) * P(m.U2_RAD, k, j, i) +
+                     G.gcov(loc, j, i, 1, 3) * P(m.U1_RAD, k, j, i) * P(m.U3_RAD, k, j, i) +
+                     G.gcov(loc, j, i, 2, 3) * P(m.U2_RAD, k, j, i) * P(m.U3_RAD, k, j, i));
+    return m::sqrt(1. + qsq);
+}
+
+// Local Lorentz Factor for Radiation
+template<typename Local>
+KOKKOS_INLINE_FUNCTION Real lorentz_calc_rad(const GRCoordinates& G, const Local& P, const VarMap& m, const int& j, const int& i, const Loci loc) {
+    Real qsq = G.gcov(loc, j, i, 1, 1) * P(m.U1_RAD) * P(m.U1_RAD) +
+               G.gcov(loc, j, i, 2, 2) * P(m.U2_RAD) * P(m.U2_RAD) +
+               G.gcov(loc, j, i, 3, 3) * P(m.U3_RAD) * P(m.U3_RAD) +
+               2. * (G.gcov(loc, j, i, 1, 2) * P(m.U1_RAD) * P(m.U2_RAD) +
+                     G.gcov(loc, j, i, 1, 3) * P(m.U1_RAD) * P(m.U3_RAD) +
+                     G.gcov(loc, j, i, 2, 3) * P(m.U2_RAD) * P(m.U3_RAD));
+    return m::sqrt(1. + qsq);
+}
+
+// Global ucon for Radiation
+template<typename Global>
+KOKKOS_INLINE_FUNCTION void calc_ucon_rad(const GRCoordinates& G, const Global& P, const VarMap& m, const int& k, const int& j, const int& i, const Loci loc, Real ucon[GR_DIM]) {
+    const Real gamma = lorentz_calc_rad(G, P, m, k, j, i, loc);
+    const Real alpha = 1. / m::sqrt(-G.gcon(loc, j, i, 0, 0));
+    ucon[0] = gamma / alpha;
+    VLOOP ucon[v+1] = P(m.U1_RAD + v, k, j, i) - gamma * alpha * G.gcon(loc, j, i, 0, v+1);
+}
+
+// Local ucon for Radiation
+template<typename Local>
+KOKKOS_INLINE_FUNCTION void calc_ucon_rad(const GRCoordinates& G, const Local& P, const VarMap& m, const int& j, const int& i, const Loci loc, Real ucon[GR_DIM]) {
+    const Real gamma = lorentz_calc_rad(G, P, m, j, i, loc);
+    const Real alpha = 1. / m::sqrt(-G.gcon(loc, j, i, 0, 0));
+    ucon[0] = gamma / alpha;
+    VLOOP ucon[v+1] = P(m.U1_RAD + v) - gamma * alpha * G.gcon(loc, j, i, 0, v+1);
 }
 
 
-// Calculate radiation four velocity in the lab frame
+
+// Calculate radiation four velocity in the lab frame (Global)
 KOKKOS_INLINE_FUNCTION void calc_4vecs(const GRCoordinates& G, const VariablePack<Real>& P, const VarMap& m,
-                                     const int& k, const int& j, const int& i, const Loci loc, FourVectors& D_rad)
+                                       const int& k, const int& j, const int& i, const Loci loc, FourVectors& D_rad)
 {
-    const Real gamma = GRMHD::lorentz_calc(G, P, m, k, j, i, loc);
-    const Real alpha = 1. / m::sqrt(-G.gcon(loc, j, i, 0, 0));
-
-    D_rad.ucon[0] = gamma / alpha;
-    
-    VLOOP D_rad.ucon[v+1] = P(m.U1_RAD + v, k, j, i) - gamma * alpha * G.gcon(loc, j, i, 0, v+1);
-
+    calc_ucon_rad(G, P, m, k, j, i, loc, D_rad.ucon);
     G.lower(D_rad.ucon, D_rad.ucov, k, j, i, loc);
 }
 
-
-// Calculate radiation four velocity in the lab frame, with Local variables
+// Calculate radiation four velocity in the lab frame (Local)
 template <typename Local>
 KOKKOS_INLINE_FUNCTION void calc_4vecs(const GRCoordinates& G, const Local& P, const VarMap& m, const int& j, const int& i, const Loci loc, FourVectors& D_rad)
 {
-    const Real gamma = GRMHD::lorentz_calc(G, P, m, j, i, loc);
-    const Real alpha = 1. / m::sqrt(-G.gcon(loc, j, i, 0, 0));
-
-    D_rad.ucon[0] = gamma / alpha;
-    
-    VLOOP D_rad.ucon[v+1] = P(m.U1_RAD + v) - gamma * alpha * G.gcon(loc, j, i, 0, v+1);
-
-    G.lower(D_rad.ucon, D_rad.ucov, 0, j, i, loc);
+    calc_ucon_rad(G, P, m, j, i, loc, D_rad.ucon);
+    G.lower(D_rad.ucon, D_rad.ucov, 0, j, i, loc); // Note: Assuming k=0 for local slices
 }
 
-// It will calculate the lab frame radiation tensor following
-// Equation $$R^{\mu\nu} = \frac{4}{3}E_{rf}u^\mu_{rf}u^\nu_{rf} + \frac{1}{3}E_{rf}g^{\mu\nu}$$
-// First index up, second index down. 
-// Note that ucon and ucov here are ucon_rad and ucov_rad
+// Standard Isotropic Tensor construction
 KOKKOS_INLINE_FUNCTION void calc_tensor(const Real& UU_rad, const FourVectors& D, const int dir, Real mhd_rad[GR_DIM])
 {
    DLOOP1 {
@@ -129,107 +154,46 @@ KOKKOS_INLINE_FUNCTION void calc_tensor(const Real& UU_rad, const FourVectors& D
     }
 }
 
-
-KOKKOS_INLINE_FUNCTION void calc_tensor_m1(const GRCoordinates& G, const VariablePack<Real>& P, const VarMap& m_p, const FourVectors D_gas, const int& dir, const int& k, const int& j, const int& i, const Loci loc, Real R_dir_mu[GR_DIM])
+// M1 Tensor construction (Global)
+KOKKOS_INLINE_FUNCTION void calc_tensor_m1(const GRCoordinates& G, const VariablePack<Real>& P, const VarMap& m_p, const int& dir, const int& k, const int& j, const int& i, const Loci loc, Real R_dir_mu[GR_DIM])
 {
-    // Extract primitive variables using 3D indices (k, j, i)
-    Real E_hat = P(m_p.UU_RAD, k, j, i);
-    Real F_space[3] = { 
-        P(m_p.U1_RAD, k, j, i), 
-        P(m_p.U2_RAD, k, j, i), 
-        P(m_p.U3_RAD, k, j, i) 
-    };
+    Real Erf = P(m_p.UU_RAD, k, j, i);
+    Real ucon_rad[GR_DIM];
+    calc_ucon_rad(G, P, m_p, k, j, i, loc, ucon_rad);
 
-    // Reconstruct full 4-vector Flux F^\mu
-    Real F_con[GR_DIM];
-    F_con[1] = F_space[0]; 
-    F_con[2] = F_space[1]; 
-    F_con[3] = F_space[2];
-    F_con[0] = -(F_con[1]*D_gas.ucov[1] + F_con[2]*D_gas.ucov[2] + F_con[3]*D_gas.ucov[3]) / D_gas.ucov[0];
-
-    Real F_cov[GR_DIM];
-    for(int mu=0; mu<4; ++mu) {
-        F_cov[mu] = 0.0;
-        // KHARMA metric functions only require j, i (axisymmetry)
-        for(int nu=0; nu<4; ++nu) F_cov[mu] += G.gcov(loc, j, i, mu, nu) * F_con[nu];
-    }
-
-    Real F_sq = 0.0;
-    for(int mu=0; mu<4; ++mu) F_sq += F_con[mu] * F_cov[mu];
-    F_sq = m::max(F_sq, 0.0);
-
-    // Eddington Factor
-    Real f_rad = (E_hat > 1e-250) ? m::min(m::sqrt(F_sq) / E_hat, 1.0) : 0.0;
-    Real f_rad_sq = f_rad * f_rad;
-    Real edd_f = (3.0 + 4.0 * f_rad_sq) / (5.0 + 2.0 * m::sqrt(m::max(4.0 - 3.0 * f_rad_sq, 0.0)));
-
-    // Build the specific row of R^{\mu\nu} for the flux direction
     Real R_con_dir[GR_DIM]; 
     for(int nu=0; nu<4; ++nu) {
-        Real P_con = E_hat * (1.0 / 3.0) * (G.gcon(loc, j, i, dir, nu) + D_gas.ucon[dir] * D_gas.ucon[nu]);
-        if (F_sq > 1e-250) {
-            P_con = E_hat * ( 
-                ((3.0 * edd_f - 1.0) / 2.0) * (G.gcon(loc, j, i, dir, nu) + D_gas.ucon[dir] * D_gas.ucon[nu]) + 
-                ((3.0 * (1.0 - edd_f)) / 2.0) * (F_con[dir] * F_con[nu] / F_sq) 
-            );
-        }
-        R_con_dir[nu] = E_hat * D_gas.ucon[dir] * D_gas.ucon[nu] + 
-                        F_con[dir] * D_gas.ucon[nu] + F_con[nu] * D_gas.ucon[dir] + P_con;
+        R_con_dir[nu] = (4.0 / 3.0) * Erf * ucon_rad[dir] * ucon_rad[nu] + 
+                        (1.0 / 3.0) * Erf * G.gcon(loc, j, i, dir, nu);
     }
 
-    // Lower one index to get R^{dir}_\mu
     for(int mu=0; mu<4; ++mu) {
         R_dir_mu[mu] = 0.0;
-        for(int nu=0; nu<4; ++nu) R_dir_mu[mu] += G.gcov(loc, j, i, mu, nu) * R_con_dir[nu];
+        for(int nu=0; nu<4; ++nu) {
+            R_dir_mu[mu] += G.gcov(loc, j, i, mu, nu) * R_con_dir[nu];
+        }
     }
 }
 
-
-
+// M1 Tensor construction (Local)
 template <typename Local>
-KOKKOS_INLINE_FUNCTION void calc_tensor_m1(const GRCoordinates& G, const Local& P, const VarMap& m_p, const FourVectors D_gas, const int& dir, const int& j, const int& i, const Loci loc, Real R_dir_mu[GR_DIM])
+KOKKOS_INLINE_FUNCTION void calc_tensor_m1(const GRCoordinates& G, const Local& P, const VarMap& m_p, const int& dir, const int& j, const int& i, const Loci loc, Real R_dir_mu[GR_DIM])
 {
-    Real E_hat = P(m_p.UU_RAD);
-    Real F_space[3] = { P(m_p.U1_RAD), P(m_p.U2_RAD), P(m_p.U3_RAD) };
+    Real Erf = P(m_p.UU_RAD);
+    Real ucon_rad[GR_DIM];
+    calc_ucon_rad(G, P, m_p, j, i, loc, ucon_rad);
 
-    //Reconstruct full 4-vector Flux F^\mu
-    Real F_con[GR_DIM];
-    F_con[1] = F_space[0]; F_con[2] = F_space[1]; F_con[3] = F_space[2];
-    F_con[0] = -(F_con[1]*D_gas.ucov[1] + F_con[2]*D_gas.ucov[2] + F_con[3]*D_gas.ucov[3]) / D_gas.ucov[0];
-
-    Real F_cov[GR_DIM];
-    for(int mu=0; mu<4; ++mu) {
-        F_cov[mu] = 0.0;
-        for(int nu=0; nu<4; ++nu) F_cov[mu] += G.gcov(loc, j, i, mu, nu) * F_con[nu];
-    }
-
-    Real F_sq = 0.0;
-    for(int mu=0; mu<4; ++mu) F_sq += F_con[mu] * F_cov[mu];
-    F_sq = m::max(F_sq, 0.0);
-
-    //Eddington Factor
-    Real f_rad = (E_hat > 1e-250) ? m::min(m::sqrt(F_sq) / E_hat, 1.0) : 0.0;
-    Real f_rad_sq = f_rad * f_rad;
-    Real edd_f = (3.0 + 4.0 * f_rad_sq) / (5.0 + 2.0 * m::sqrt(m::max(4.0 - 3.0 * f_rad_sq, 0.0)));
-
-    // Build the specific row of R^{\mu\nu} for the flux direction
     Real R_con_dir[GR_DIM]; 
     for(int nu=0; nu<4; ++nu) {
-        Real P_con = E_hat * (1.0 / 3.0) * (G.gcon(loc, j, i, dir, nu) + D_gas.ucon[dir] * D_gas.ucon[nu]);
-        if (F_sq > 1e-250) {
-            P_con = E_hat * ( 
-                ((3.0 * edd_f - 1.0) / 2.0) * (G.gcon(loc, j, i, dir, nu) + D_gas.ucon[dir] * D_gas.ucon[nu]) + 
-                ((3.0 * (1.0 - edd_f)) / 2.0) * (F_con[dir] * F_con[nu] / F_sq) 
-            );
-        }
-        R_con_dir[nu] = E_hat * D_gas.ucon[dir] * D_gas.ucon[nu] + 
-                        F_con[dir] * D_gas.ucon[nu] + F_con[nu] * D_gas.ucon[dir] + P_con;
+        R_con_dir[nu] = (4.0 / 3.0) * Erf * ucon_rad[dir] * ucon_rad[nu] + 
+                        (1.0 / 3.0) * Erf * G.gcon(loc, j, i, dir, nu);
     }
 
-    // Lower one index to get R^{dir}_\mu
     for(int mu=0; mu<4; ++mu) {
         R_dir_mu[mu] = 0.0;
-        for(int nu=0; nu<4; ++nu) R_dir_mu[mu] += G.gcov(loc, j, i, mu, nu) * R_con_dir[nu];
+        for(int nu=0; nu<4; ++nu) {
+            R_dir_mu[mu] += G.gcov(loc, j, i, mu, nu) * R_con_dir[nu];
+        }
     }
 }
 

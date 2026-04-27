@@ -244,6 +244,7 @@ KOKKOS_INLINE_FUNCTION void calc_4vecs(const GRCoordinates& G, const Local& P, c
         DLOOP1 D.bcon[mu] = D.bcov[mu] = 0.;
     }
 }
+
 /**
  * Just the velocity 4-vector, in the first two styles of calc_4vecs.  For various corners.
  */

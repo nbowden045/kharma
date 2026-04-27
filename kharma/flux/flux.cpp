@@ -444,12 +444,6 @@ void Flux::AddGeoSource(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDomain d
             FourVectors D;
             GRMHD::calc_4vecs(G, P(b), m_p, k, j, i, Loci::center, D);
 
-            // //Out of the package modification RADM1.
-            // FourVectors D_rad;
-            // if(use_rad) {
-            //     RadM1::calc_4vecs(G, P(b), m_p, k, j, i, Loci::center, D_rad);
-            // }
-        
             // Call Flux::calc_tensor which will in turn call the right calc_tensor based on the number of primitives
             Real Tmu[GR_DIM]    = {0};
             Real new_du[GR_DIM] = {0};
@@ -462,14 +456,8 @@ void Flux::AddGeoSource(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDomain d
                 
                 //Out of the package modification RADM1.
                 if(use_rad) {
-                    // GReal UU_rad = P(b, m_p.UU_RAD, k, j, i);
-                    // RadM1::calc_tensor(UU_rad, D_rad, mu, Rmu);
-                    // for (int nu = 0; nu < GR_DIM; ++nu) {
-                    //     for (int lam = 0; lam < GR_DIM; ++lam) {
-                    //         new_du_rad[nu] += Rmu[nu] * G.gdet_conn(j, i, nu, lam, mu); // Contract Rmu with connection, and multiply by metric determinant~.
-                    //     }
-                    // }
-                    RadM1::calc_tensor_m1(G, P(b), m_p, D, mu, k, j, i, Loci::center, Rmu);
+
+                    RadM1::calc_tensor_m1(G, P(b), m_p, mu, k, j, i, Loci::center, Rmu);
                     
                     for (int nu = 0; nu < GR_DIM; ++nu) {
                         for (int lam = 0; lam < GR_DIM; ++lam) {

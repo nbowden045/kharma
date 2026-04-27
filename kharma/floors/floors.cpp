@@ -233,7 +233,7 @@ TaskStatus Floors::ApplyInitialFloors(ParameterInput *pin, MeshBlockData<Real> *
         // Because ApplyRadM1Floors only modifies Primitive variables (P),
         // you MUST sync the modified Primitives back to Conserved variables (U) here.
         // If you have a function like RadM1::BlockPtoU, call it now!
-        RadM1::BlockUtoP(mbd, domain, false);
+        RadM1::BlockPtoU(mbd, domain, false);
     }
 
     EndFlag();
