@@ -219,7 +219,7 @@ KOKKOS_INLINE_FUNCTION void exp_taylor_series_fourth_order(const GReal M[GR_DIM]
                        {0, 0, 1, 0},
                        {0, 0, 0, 1} };
 
-    // Compute M^2
+    // Compute M^4
     // Matrices to hold M^2, M^3, and M^4
     double M2[GR_DIM][GR_DIM] = {0};
     double M3[GR_DIM][GR_DIM] = {0};
@@ -229,10 +229,56 @@ KOKKOS_INLINE_FUNCTION void exp_taylor_series_fourth_order(const GReal M[GR_DIM]
     matrix_multiply(M2, M, M3);
     matrix_multiply(M3, M, M4);
 
-    // expM = I + M + (1/2) * M^2
+    // expM = I + M + (1/2) * M^2 + (1/6) * M^3 + (1/24) * M^4
     for (int i = 0; i < GR_DIM; ++i) {
         for (int j = 0; j < GR_DIM; ++j) {
             expM[i][j] = I[i][j] + M[i][j] + ((1./2.) * M2[i][j]) + ((1./6.) * M3[i][j]) + ((1./24.) * M4[i][j]);
+        }
+    }
+}
+
+/**
+ * Compute matrix exponential (4x4) to eighth order.
+ * Needed to apply similarity transformation to modified gravity metrics
+*/
+KOKKOS_INLINE_FUNCTION void exp_taylor_series_eighth_order(const GReal M[GR_DIM][GR_DIM],  GReal expM[GR_DIM][GR_DIM])
+{
+    // Identity matrix
+    double I[GR_DIM][GR_DIM] = { {1, 0, 0, 0},
+                       {0, 1, 0, 0},
+                       {0, 0, 1, 0},
+                       {0, 0, 0, 1} };
+
+    // Compute M^8
+    // Matrices to hold M^2, M^3, M^4, M^5, M^6, M^7, and M^8
+    double M2[GR_DIM][GR_DIM] = {0};
+    double M3[GR_DIM][GR_DIM] = {0};
+    double M4[GR_DIM][GR_DIM] = {0};
+    double M5[GR_DIM][GR_DIM] = {0};
+    double M6[GR_DIM][GR_DIM] = {0};
+    double M7[GR_DIM][GR_DIM] = {0};
+    double M8[GR_DIM][GR_DIM] = {0};
+    // Perform matrix multiplication
+    matrix_multiply(M, M, M2);
+    matrix_multiply(M2, M, M3);
+    matrix_multiply(M3, M, M4);
+    matrix_multiply(M4, M, M5);
+    matrix_multiply(M5, M, M6);
+    matrix_multiply(M6, M, M7);
+    matrix_multiply(M7, M, M8);
+
+    // expM = I + M + (1/2) * M^2 + (1/6) * M^3 + (1/24) * M^4 + (1/120) * M^5 + 
+    // (1/720) * M^6 + (1/5040) * M^7 + (1/40320) * M^8
+    for (int i = 0; i < GR_DIM; ++i) {
+        for (int j = 0; j < GR_DIM; ++j) {
+            expM[i][j] = I[i][j] + M[i][j] + 
+                         ((1./2.) * M2[i][j]) + 
+                         ((1./6.) * M3[i][j]) +
+                         ((1./24.) * M4[i][j]) +
+                         ((1./120.) * M5[i][j]) +
+                         ((1./720.) * M6[i][j]) +
+                         ((1./5040.) * M7[i][j]) +
+                         ((1./40320.) * M8[i][j]);
         }
     }
 }

@@ -222,7 +222,7 @@ KOKKOS_INLINE_FUNCTION void metric_correction_dcs(const Real a, const Real zeta,
     const GReal sth = m::sin(th);
 
     // Compute correction
-    if (r < r_eh) {
+    if (r <= r_eh) {
         gcov_corr[0][0] = r * (-0.10186551426782008 + 0.2044681509464842*m::pow(cth,2) -
                     0.047577127121860865 * m::pow(cth,4) + r * (0.045274692542072226 -
                     0.09476108773453298 * m::pow(cth,2) + 0.024336657157255144 * m::pow(cth,4)));
@@ -242,7 +242,7 @@ KOKKOS_INLINE_FUNCTION void metric_correction_dcs(const Real a, const Real zeta,
                     0.021849341728100158*m::pow(cth,4) + 0.002212274207079146*m::pow(cth,6)));
         gcov_corr[2][2] = r*(-0.005891088388619743 - 0.08213157970162656*m::pow(cth,2) +
                     0.04869729617963716*m::pow(cth,4) + r*(0.0012258296731578948 +
-                    0.04059152589803598*m::pow(cth,2) - 0.022648614125266385*m::pow(cth,4))) * m::pow(sth,2);
+                    0.04059152589803598*m::pow(cth,2) - 0.022648614125266385*m::pow(cth,4)));
         gcov_corr[3][3] = r*(0.0779005273559132 - 0.18750384045886062*m::pow(cth,2) +
                     0.07027794119233827*m::pow(cth,4) + r*(-0.03758218403345795 +
                     0.08957607617157008*m::pow(cth,2) - 0.03282515069218463*m::pow(cth,4)));
@@ -298,7 +298,7 @@ KOKKOS_INLINE_FUNCTION void metric_correction_dcs(const Real a, const Real zeta,
                     m::pow(r,6)*(0.009614703564723954 + 0.0025952067717499227*m::pow(cth,2) + 0.0035080403187452754*m::pow(cth,4)) + 
                     m::pow(r,9)*(-0.019512591789299767 + 0.02926262957652467*m::pow(cth,2) + 0.010298255966503736*m::pow(cth,4)) + 
                     m::pow(r,2)*(0.000149323899600326 - 1.2358144829850521*m::pow(cth,2) + 0.18861356442701813*m::pow(cth,4)) + 
-                    r*(-0.0016613798015832518*m::pow(cth,2) + 0.7709044110221688*m::pow(cth,4)))/m::pow(r,10)) * m::pow(sth,2);
+                    r*(-0.0016613798015832518*m::pow(cth,2) + 0.7709044110221688*m::pow(cth,4)))/m::pow(r,10));
         gcov_corr[3][3] = (-0.021043834771824328*m::pow(r,8) + 2.185855263157895*m::pow(cth,4) + 
                     m::pow(r,7)*(0.03337541444374187 - 0.031966079480574595*m::pow(cth,2) - 0.009891183035714287*m::pow(cth,4)) + 
                     m::pow(r,6)*(0.09176977844624386 - 0.08243249139825083*m::pow(cth,2) + 0.006380663607226107*m::pow(cth,4)) + 
@@ -324,7 +324,7 @@ KOKKOS_INLINE_FUNCTION void metric_correction_edgb(const Real a, const Real zeta
     const GReal sth = m::sin(th);
 
     // Compute correction
-    if (r < r_eh) {
+    if (r <= r_eh) {
         gcov_corr[0][0] = r * (0.09881663310865521 - 0.06589959486016632*m::pow(cth,2) +
                     0.09483604081290098*m::pow(cth,4) + r * (-0.0508082639442996 +
                     0.03603450867902285*m::pow(cth,2) - 0.04755871830571102*m::pow(cth,4)));
@@ -344,7 +344,7 @@ KOKKOS_INLINE_FUNCTION void metric_correction_edgb(const Real a, const Real zeta
                     0.024521350206178745*m::pow(cth,4) + 0.0002991803500262339*m::pow(cth,6)));
         gcov_corr[2][2] = r * (-0.2456694322274893 + 0.11802793355278088*m::pow(cth,2) -
                     0.06388746774868627*m::pow(cth,4) + r * (0.11088665306540471 -
-                    0.06020804162310437*m::pow(cth,2) + 0.033009174906014245*m::pow(cth,4))) * m::pow(sth,2);
+                    0.06020804162310437*m::pow(cth,2) + 0.033009174906014245*m::pow(cth,4)));
         gcov_corr[3][3] = r * (-0.10427504873012293 - 0.05238594045593648*m::pow(cth,2) -
                     0.034867977237335264*m::pow(cth,4) + r * (0.04443039634840591 +
                     0.02057044808324951*m::pow(cth,2) + 0.01868694191665917*m::pow(cth,4)));
@@ -401,7 +401,7 @@ KOKKOS_INLINE_FUNCTION void metric_correction_edgb(const Real a, const Real zeta
                     m::pow(r,7)*(-0.0072303365947720705 - 0.007939422645679456*m::pow(cth,2) + 0.001249323593073593*m::pow(cth,4)) + 
                     m::pow(r,9)*(-0.056750235572314435 - 0.010559999053525839*m::pow(cth,2) + 0.00445260686733901*m::pow(cth,4)) + 
                     m::pow(r,4)*(-0.5106316084099219 + 0.19908686704982395*m::pow(cth,2) + 0.028473515888031427*m::pow(cth,4)) + 
-                    m::pow(r,3)*(0.028197926131824688 + 0.6750414186358245*m::pow(cth,2) + 0.08076936297872989*m::pow(cth,4))) / m::pow(r,10)) * m::pow(sth,2);
+                    m::pow(r,3)*(0.028197926131824688 + 0.6750414186358245*m::pow(cth,2) + 0.08076936297872989*m::pow(cth,4))) / m::pow(r,10));
         gcov_corr[3][3] = (0.011715052283488538*m::pow(r,8) - 2.497480063795853*m::pow(cth,4) + 
                     r*(-0.2615718116469996*m::pow(cth,2) - 0.5723559942931902*m::pow(cth,4)) + 
                     m::pow(r,6)*(-0.11989098816006717 - 0.1484125805140812*m::pow(cth,2) - 0.003579156954156954*m::pow(cth,4)) + 
@@ -426,7 +426,7 @@ KOKKOS_INLINE_FUNCTION void radius_correction_dcs(const Real a, const Real zeta,
     const GReal cth = m::cos(th);
 
     // Compute correction
-    if (r < r_eh) {
+    if (r <= r_eh) {
         r_new = r * (1.020691229419899 - 0.031030208008011838*m::pow(cth,2) -
             0.01092031131121305*m::pow(cth,4) + r * (-0.005485265354929308 +
             0.008226138789940869*m::pow(cth,2) + 0.0028949853140593047*m::pow(cth,4)));
@@ -448,7 +448,7 @@ KOKKOS_INLINE_FUNCTION void radius_correction_edgb(const Real a, const Real zeta
     const GReal cth = m::cos(th);
 
     // Compute correction
-    if (r < r_eh) {
+    if (r <= r_eh) {
         r_new = r * (1.0629450418611497 + 0.01171271935304809*m::pow(cth,2) - 
             0.00493864955500953*m::pow(cth,4) + r * (-0.01745401695228727 - 
             0.0032478173991280367*m::pow(cth,2) + 0.0013694370597876334*m::pow(cth,4)));
