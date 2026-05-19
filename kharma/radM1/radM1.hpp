@@ -167,12 +167,7 @@ KOKKOS_INLINE_FUNCTION void calc_tensor_m1(const GRCoordinates& G, const Variabl
                         (1.0 / 3.0) * Erf * G.gcon(loc, j, i, dir, nu);
     }
 
-    for(int mu=0; mu<4; ++mu) {
-        R_dir_mu[mu] = 0.0;
-        for(int nu=0; nu<4; ++nu) {
-            R_dir_mu[mu] += G.gcov(loc, j, i, mu, nu) * R_con_dir[nu];
-        }
-    }
+    G.lower(R_con_dir, R_dir_mu, k, j, i, loc);
 }
 
 // M1 Tensor construction (Local)
@@ -189,12 +184,7 @@ KOKKOS_INLINE_FUNCTION void calc_tensor_m1(const GRCoordinates& G, const Local& 
                         (1.0 / 3.0) * Erf * G.gcon(loc, j, i, dir, nu);
     }
 
-    for(int mu=0; mu<4; ++mu) {
-        R_dir_mu[mu] = 0.0;
-        for(int nu=0; nu<4; ++nu) {
-            R_dir_mu[mu] += G.gcov(loc, j, i, mu, nu) * R_con_dir[nu];
-        }
-    }
+    G.lower(R_con_dir, R_dir_mu, 0, j, i, loc); // Note: Assuming k=0 for local slices
 }
 
 KOKKOS_INLINE_FUNCTION void initialize_radiation_pressure(Real UU, Real * UU_rad) {

@@ -136,6 +136,8 @@ TaskStatus InitializeFMTorus(std::shared_ptr<MeshBlockData<Real>>& rc, Parameter
                 uvec(0, k, j, i) = u_prim[0];
                 uvec(1, k, j, i) = u_prim[1];
                 uvec(2, k, j, i) = u_prim[2];
+
+                // Out of the package modification RADM1.
                 if(use_rad){
                     uu_rad(k, j, i) = 0.0;
                     uvec_rad(0, k, j, i) = u_prim[0];
@@ -205,6 +207,7 @@ TaskStatus InitializeFMTorus(std::shared_ptr<MeshBlockData<Real>>& rc, Parameter
             u(k, j, i) /= rho_max;
 
             if(use_rad){
+                //Following Koral initialization for fishbone moncrief
                 RadM1::initialize_radiation_pressure(u(k,j,i), &uu_rad(k,j,i));
             }
         }

@@ -35,8 +35,8 @@
 #include "kharma_driver.hpp"
 #include "units.hpp"
 #include "kharma.hpp"
-#include "inverter.hpp"  // Add this include
-
+#include "inverter.hpp"
+#include <limits> 
 std::shared_ptr<KHARMAPackage> RadM1::Initialize(ParameterInput *pin, std::shared_ptr<Packages_t>& packages)
 {
     bool units_enabled = pin->GetOrAddBoolean("units", "on", false);
@@ -238,6 +238,48 @@ TaskStatus RadM1::BlockPtoU(MeshBlockData<Real> *rc, IndexDomain domain, bool co
     return TaskStatus::complete;
 }
 
+
+KOKKOS_INLINE_FUNCTION void ApplyColdClosureFix(const GRCoordinates& G, 
+                                                const Real R_t_cov_orig[GR_DIM], 
+                                                const double gammarel2_fixed,
+                                                const int& j, const int& i, 
+                                                Real& new_R_t_t, 
+                                                Real& Erf) {
+    
+    Real gcon_tt = G.gcon(Loci::center, j, i, 0, 0);
+    
+    // Time-Space cross term: g^{ti} R_i
+    Real dot_t_i = G.gcon(Loci::center, j, i, 0, 1) * R_t_cov_orig[1] +
+                   G.gcon(Loci::center, j, i, 0, 2) * R_t_cov_orig[2] +
+                   G.gcon(Loci::center, j, i, 0, 3) * R_t_cov_orig[3];
+
+    // Purely Spatial term: g^{ij} R_i R_j
+    Real dot_spatial = G.gcon(Loci::center, j, i, 1, 1) * (R_t_cov_orig[1] * R_t_cov_orig[1]) +
+                 2.0 * G.gcon(Loci::center, j, i, 1, 2) * (R_t_cov_orig[1] * R_t_cov_orig[2]) +
+                       G.gcon(Loci::center, j, i, 2, 2) * (R_t_cov_orig[2] * R_t_cov_orig[2]) +
+                 2.0 * G.gcon(Loci::center, j, i, 1, 3) * (R_t_cov_orig[1] * R_t_cov_orig[3]) +
+                 2.0 * G.gcon(Loci::center, j, i, 2, 3) * (R_t_cov_orig[2] * R_t_cov_orig[3]) +
+                       G.gcon(Loci::center, j, i, 3, 3) * (R_t_cov_orig[3] * R_t_cov_orig[3]);
+
+    // In HARM/Kharma, alpha = 1.0 / sqrt(-gcon_tt). 
+    // Therefore utsq = gammarel2 / alpha^2 simplifies to:
+    Real utsq = -gammarel2_fixed * gcon_tt; 
+
+    // The massive C-string expands exactly to (dot_t_i^2 - gcon_tt * dot_spatial).
+    Real radical_inside = (dot_t_i * dot_t_i - gcon_tt * dot_spatial) 
+                        * utsq * (gcon_tt + utsq) 
+                        * m::pow(gcon_tt + 4.0 * utsq, 2);
+                        
+    Real radical = m::sqrt(m::max(0.0, radical_inside));
+
+    // Calculate new covariant R_t (Avcov[0] in C)
+    new_R_t_t = 0.25 * (-4.0 * dot_t_i * utsq * (gcon_tt + utsq) + radical) 
+              / (gcon_tt * utsq * (gcon_tt + utsq));
+
+    // Calculate fluid-frame energy Erf
+    Erf = 0.75 * radical / (utsq * (gcon_tt + utsq) * (gcon_tt + 4.0 * utsq));
+}
+
 KOKKOS_INLINE_FUNCTION double CalculateGammaRel2(const GRCoordinates& G, const Real R_t_cov[GR_DIM], const Real invariant_scalar, const int& j, const int& i) {
     Real gcon_tt = G.gcon(Loci::center, j, i, 0, 0);
     Real R_t_t = R_t_cov[0];
@@ -285,7 +327,9 @@ KOKKOS_INLINE_FUNCTION double CalculateGammaRel2(const GRCoordinates& G, const R
     Real gammarel2 = gamma2 * alpha_sq; 
 
     // Hard floor for physical bounds (Lorentz factor squared MUST be >= 1.0)
-    if (gammarel2 < 1.0 || m::isnan(gammarel2)) {
+    // TODO: FLOOR! CHANGE THIS
+    Real GAMMA_SMALL_LIMIT = (1.0-1e-10);
+    if (gammarel2 < 1.0 && gammarel2 > GAMMA_SMALL_LIMIT) {
         gammarel2 = 1.0;
     }
     
@@ -309,6 +353,9 @@ TaskStatus RadM1::BlockUtoP(MeshBlockData<Real> *rc, IndexDomain domain, bool co
     //Get Loop Bounds
     IndexRange3 b = KDomain::GetRange(rc, domain, coarse);
 
+    auto& params = pmb->packages.Get("RadM1")->AllParams();
+    //TODO: FLOOR! CHANGE THIS
+    const Real min_erad   = 10.*1.e-80;
 
     //Parallel Loop
     pmb->par_for("RadM1_UtoP", b.ks, b.ke, b.js, b.je, b.is, b.ie,
@@ -363,17 +410,57 @@ TaskStatus RadM1::BlockUtoP(MeshBlockData<Real> *rc, IndexDomain domain, bool co
 
             // Pre-calculate alpha_sq so E_rf can use it
             Real alpha_sq = -1.0 / G.gcon(Loci::center, j, i, 0, 0); 
-            Real E_rf = (3.0 * R_t_con[0] * alpha_sq) / (4.0 * gammarel2 - 1.0);
-            //There were a lot of checks in this part, so I should test this very carefully.
-            if(E_rf < 0.0 || m::isnan(E_rf) || m::isinf(E_rf)) {
-                printf("Something Happened!, E_rf = %e, R_t_con[0]: %e, alpha_sq %e, gammarel2 %e\n", E_rf, R_t_con[0], alpha_sq, gammarel2);
-            }
-            Real uvec_radframe_con[4];
             Real alpha = m::sqrt(alpha_sq);
-            for(int mu=0; mu<4; ++mu) {
-                uvec_radframe_con[mu] = alpha * (R_t_con[mu] + 1./3. * E_rf * G.gcon(Loci::center, j, i, 0, mu) * (4.0 * gammarel2 - 1.0))/(4./3. * E_rf * sqrt(gammarel2));
+            Real E_rf = (3.0 * R_t_con[0] * alpha_sq) / (4.0 * gammarel2 - 1.0);
+            
+            // TODO: FLOOR! CHANGE THIS
+            Real GAMMAMAX = 20.;
+            int nonfailure = gammarel2 >= 1.0 && E_rf > min_erad && gammarel2 <= (GAMMAMAX * GAMMAMAX)/(min_erad * min_erad);
+            Real uvec_radframe_con[4] = {0};
+
+            if(nonfailure){
+                for(int mu=0; mu<4; ++mu) {
+                    uvec_radframe_con[mu] = alpha * (R_t_con[mu] + 1./3. * E_rf * G.gcon(Loci::center, j, i, 0, mu) * (4.0 * gammarel2 - 1.0)) / (4./3. * E_rf * m::sqrt(gammarel2));
+                }
+            } else {
+                // Attempt Cold Closure
+                Real gammarel2_slow = m::pow(1.0 +10.0 * std::numeric_limits<double>::epsilon(), 2.0);
+                Real gammarel2_fast = GAMMAMAX * GAMMAMAX;
+
+                Real R_t_t_slow, Erf_slow;
+                ApplyColdClosureFix(G, R_t_cov, gammarel2_slow, j, i, R_t_t_slow, Erf_slow);
+
+                Real R_t_t_fast, Erf_fast;
+                ApplyColdClosureFix(G, R_t_cov, gammarel2_fast, j, i, R_t_t_fast, Erf_fast);
+
+                Real R_t_t_new, gammarel2_new;
+                
+                if (m::abs(R_t_t_slow - R_t_cov[0]) > m::abs(R_t_t_fast - R_t_cov[0])) {
+                    R_t_t_new = R_t_t_fast;
+                    E_rf = Erf_fast;
+                    gammarel2_new = gammarel2_fast;
+                } else {
+                    R_t_t_new = R_t_t_slow;
+                    E_rf = Erf_slow;
+                    gammarel2_new = gammarel2_slow;
+                }
+
+                Real R_t_cov_new[GR_DIM] = {R_t_t_new, R_t_cov[1], R_t_cov[2], R_t_cov[3]};
+
+                Real R_t_con_new[GR_DIM];
+                G.raise(R_t_cov_new, R_t_con_new, k, j, i, Loci::center);
+
+                // Calculate primitive velocities with the new state
+                if (E_rf > 0.0) {
+                    for(int mu=0; mu<4; ++mu) {
+                        uvec_radframe_con[mu] = alpha * (R_t_con_new[mu] + 1./3. * E_rf * G.gcon(Loci::center, j, i, 0, mu) * (4.0 * gammarel2_new - 1.0)) / (4./3. * E_rf * m::sqrt(gammarel2_new));
+                    }
+                } else {
+                    for(int mu=0; mu<4; ++mu) uvec_radframe_con[mu] = 0.0;
+                }
             }
 
+            // Pack Results
             P(m_p.UU_RAD, k, j, i) = E_rf;
             P(m_p.U1_RAD, k, j, i) = uvec_radframe_con[1];
             P(m_p.U2_RAD, k, j, i) = uvec_radframe_con[2];
@@ -384,60 +471,60 @@ TaskStatus RadM1::BlockUtoP(MeshBlockData<Real> *rc, IndexDomain domain, bool co
 }
 
 
-// KOKKOS_INLINE_FUNCTION void calc_Gnu(
-//     const GRCoordinates& G, const VariablePack<Real>& P_guess, const VarMap& m_p, 
-//     const int k, const int j, const int i, 
-//     const Real kappa_ep, const Real sigma, const Real gam, 
-//     GReal* Gnu_gdet) {
-
-//     Gnu_gdet[0] = 0.0; // Energy exchange term
-//     Gnu_gdet[1] = 0.0; // Momentum exchange term in x
-//     Gnu_gdet[2] = 0.0; // Momentum exchange term in
-//     Gnu_gdet[3] = 0.0; // Momentum exchange term in z
-    
-// }
-
 KOKKOS_INLINE_FUNCTION void calc_Gnu(
     const GRCoordinates& G, const VariablePack<Real>& P_guess, const VarMap& m_p, 
     const int k, const int j, const int i, 
     const Real kappa_ep, const Real sigma, const Real gam, 
-    GReal* Gnu_gdet) 
+    GReal* Gnu_gdet)
 {
-    Real gdet = G.gdet(Loci::center, j, i);
+    Gnu_gdet[0] = 0.0; // Energy exchange term
+    Gnu_gdet[1] = 0.0; // Momentum exchange term in x
+    Gnu_gdet[2] = 0.0; // Momentum exchange term in
+    Gnu_gdet[3] = 0.0; // Momentum exchange term in z
     
-    // Get Gas primitives & Compute Temperature (T = P_gas / rho)
-    Real rho = P_guess(m_p.RHO, k, j, i);
-    Real uu_gas = P_guess(m_p.UU, k, j, i);
-    Real P_gas = (gam - 1.0) * uu_gas; 
-    Real T = P_gas / rho;
-    
-    //Get 4-velocity and FourVectors for the M1 Tensor
-    FourVectors D_gas;
-    GRMHD::calc_4vecs(G, P_guess, m_p, k, j, i, Loci::center, D_gas);
-    
-    // Construct the full lab-frame Radiation Tensor R^{\mu\nu}
-    // calc_tensor_m1 computes R^{\mu\nu} for a specific direction \mu. 
-    // We call it 4 times to fill the whole 4x4 matrix.
-    Real R_tensor[4][4];
-    RadM1::calc_tensor_m1(G, P_guess, m_p, 0, k, j, i, Loci::center, R_tensor[0]);
-    RadM1::calc_tensor_m1(G, P_guess, m_p, 1, k, j, i, Loci::center, R_tensor[1]);
-    RadM1::calc_tensor_m1(G, P_guess, m_p, 2, k, j, i, Loci::center, R_tensor[2]);
-    RadM1::calc_tensor_m1(G, P_guess, m_p, 3, k, j, i, Loci::center, R_tensor[3]);
-    
-    // Compute G^\mu = - \rho \kappa ( R^{\mu\alpha} u_\alpha + \sigma T^4 u^\mu )
-    Real kappa = kappa_ep * rho;
-    Real emission_term = sigma * pow(T, 4);
-    
-    for (int mu = 0; mu < 4; ++mu) {
-        Real R_u = 0.0;
-        for (int alpha = 0; alpha < 4; ++alpha) {
-            R_u += R_tensor[mu][alpha] * D_gas.ucov[alpha];
-        }
-        
-        Real Gnu = -rho * kappa * (R_u + emission_term * D_gas.ucon[mu]);
-        Gnu_gdet[mu] = Gnu * gdet;
-    }
 }
+
+// KOKKOS_INLINE_FUNCTION void calc_Gnu(
+//     const GRCoordinates& G, const VariablePack<Real>& P_guess, const VarMap& m_p, 
+//     const int k, const int j, const int i, 
+//     const Real kappa_ep, const Real sigma, const Real gam, 
+//     GReal* Gnu_gdet) 
+// {
+//     Real gdet = G.gdet(Loci::center, j, i);
+    
+//     // Get Gas primitives & Compute Temperature (T = P_gas / rho)
+//     Real rho = P_guess(m_p.RHO, k, j, i);
+//     Real uu_gas = P_guess(m_p.UU, k, j, i);
+//     Real P_gas = (gam - 1.0) * uu_gas; 
+//     Real T = P_gas / rho;
+    
+//     //Get 4-velocity and FourVectors for the M1 Tensor
+//     FourVectors D_gas;
+//     GRMHD::calc_4vecs(G, P_guess, m_p, k, j, i, Loci::center, D_gas);
+    
+//     // Construct the full lab-frame Radiation Tensor R^{\mu\nu}
+//     // calc_tensor_m1 computes R^{\mu\nu} for a specific direction \mu. 
+//     // We call it 4 times to fill the whole 4x4 matrix.
+//     Real R_tensor[4][4];
+//     RadM1::calc_tensor_m1(G, P_guess, m_p, 0, k, j, i, Loci::center, R_tensor[0]);
+//     RadM1::calc_tensor_m1(G, P_guess, m_p, 1, k, j, i, Loci::center, R_tensor[1]);
+//     RadM1::calc_tensor_m1(G, P_guess, m_p, 2, k, j, i, Loci::center, R_tensor[2]);
+//     RadM1::calc_tensor_m1(G, P_guess, m_p, 3, k, j, i, Loci::center, R_tensor[3]);
+    
+//     // Compute G^\mu = - \rho \kappa ( R^{\mu\alpha} u_\alpha + \sigma T^4 u^\mu )
+//     Real kappa = kappa_ep * rho;
+//     Real emission_term = sigma * pow(T, 4);
+    
+//     for (int mu = 0; mu < 4; ++mu) {
+//         Real R_u = 0.0;
+//         for (int alpha = 0; alpha < 4; ++alpha) {
+//             R_u += R_tensor[mu][alpha] * D_gas.ucov[alpha];
+//         }
+        
+//         Real Gnu = -rho * kappa * (R_u + emission_term * D_gas.ucon[mu]);
+//         Gnu_gdet[mu] = Gnu * gdet;
+//     }
+// }
 
 
 KOKKOS_INLINE_FUNCTION int SetImplicitInitialGuess(
