@@ -217,8 +217,8 @@ TaskStatus RadM1::BlockPtoU(MeshBlockData<Real> *rc, IndexDomain domain, bool co
         Real uvec_radframe[4] = {0, P(m_p.U1_RAD, k, j, i), P(m_p.U2_RAD, k, j, i), P(m_p.U3_RAD, k, j, i)};
         const Real gamma = GRMHD::lorentz_calc(G, uvec_radframe, k, j, i, Loci::center);
         Real ucon_rad[GR_DIM];
-        GRMHD::calc_ucon(G, uvec_radframe, k, j, i, Loci::center, ucon_rad);
-
+        //GRMHD::calc_ucon(G, uvec_radframe, k, j, i, Loci::center, ucon_rad);
+        calc_ucon_rad(G, P, m_p, k, j, i, Loci::center, ucon_rad);
         // R^t^mu
         Real R_t_con[GR_DIM];
 
@@ -484,236 +484,37 @@ KOKKOS_INLINE_FUNCTION void calc_Gnu(
     
 }
 
-// KOKKOS_INLINE_FUNCTION void calc_Gnu(
-//     const GRCoordinates& G, const VariablePack<Real>& P_guess, const VarMap& m_p, 
-//     const int k, const int j, const int i, 
-//     const Real kappa_ep, const Real sigma, const Real gam, 
-//     GReal* Gnu_gdet) 
-// {
-//     Real gdet = G.gdet(Loci::center, j, i);
-    
-//     // Get Gas primitives & Compute Temperature (T = P_gas / rho)
-//     Real rho = P_guess(m_p.RHO, k, j, i);
-//     Real uu_gas = P_guess(m_p.UU, k, j, i);
-//     Real P_gas = (gam - 1.0) * uu_gas; 
-//     Real T = P_gas / rho;
-    
-//     //Get 4-velocity and FourVectors for the M1 Tensor
-//     FourVectors D_gas;
-//     GRMHD::calc_4vecs(G, P_guess, m_p, k, j, i, Loci::center, D_gas);
-    
-//     // Construct the full lab-frame Radiation Tensor R^{\mu\nu}
-//     // calc_tensor_m1 computes R^{\mu\nu} for a specific direction \mu. 
-//     // We call it 4 times to fill the whole 4x4 matrix.
-//     Real R_tensor[4][4];
-//     RadM1::calc_tensor_m1(G, P_guess, m_p, 0, k, j, i, Loci::center, R_tensor[0]);
-//     RadM1::calc_tensor_m1(G, P_guess, m_p, 1, k, j, i, Loci::center, R_tensor[1]);
-//     RadM1::calc_tensor_m1(G, P_guess, m_p, 2, k, j, i, Loci::center, R_tensor[2]);
-//     RadM1::calc_tensor_m1(G, P_guess, m_p, 3, k, j, i, Loci::center, R_tensor[3]);
-    
-//     // Compute G^\mu = - \rho \kappa ( R^{\mu\alpha} u_\alpha + \sigma T^4 u^\mu )
-//     Real kappa = kappa_ep * rho;
-//     Real emission_term = sigma * pow(T, 4);
-    
-//     for (int mu = 0; mu < 4; ++mu) {
-//         Real R_u = 0.0;
-//         for (int alpha = 0; alpha < 4; ++alpha) {
-//             R_u += R_tensor[mu][alpha] * D_gas.ucov[alpha];
-//         }
-        
-//         Real Gnu = -rho * kappa * (R_u + emission_term * D_gas.ucon[mu]);
-//         Gnu_gdet[mu] = Gnu * gdet;
-//     }
-// }
-
-
-KOKKOS_INLINE_FUNCTION int SetImplicitInitialGuess(
-    const GRCoordinates& G, const VarMap& m_p, const VarMap& m_u, 
-    VariablePack<Real>& U, VariablePack<Real>& U_guess, VariablePack<Real>& P_guess, VariablePack<Real>& dU, 
-    const Real dt, const int k, const int j, const int i, 
-    GReal* Gnu_gdet, const int iter_max, const Real err_tol, const Real gam, const Real kappa_ep, const Real sigma)
+KOKKOS_INLINE_FUNCTION void calc_Rtt_ff(const GRCoordinates& G, const VariablePack<Real>& P, const VarMap& m_p, const int& k, const int& j, const int& i, const Loci loc, Real * Rtt, Real ucon_gas[GR_DIM])
 {
-// The function will follow:
-// 1. Calculate U->P for gas and radiation variables
-// 2. Then Recalculate U from P for gas variables.
-// 3. Calculate the source term Gnu from this P.
-// 4. Calculate \Delta U = (sqrt(-g)) * Gnu * dt
-// 5. Calculate relative error for the gas variables:
-    // Energy: 
-        // Norm_0 = |U_n_0| + |U_{n+1}_0| + |dt * dU_0|
-        // Error_0 = 0.25 * |U_{n+1}_0 - U_n_0 - dt * dU_0| / Norm_0
+    Real Rij[GR_DIM][GR_DIM];
 
-    // Momentum:
-        // Combine the scale of all 3 momentum directions into one norm
-        // Norm_mom = (|sqrt(g^11) * U_n_1| + |sqrt(g^11) * U_{n+1}_1| + |sqrt(g^11) * dt * dU_1|) +
-        //            (|sqrt(g^22) * U_n_2| + |sqrt(g^22) * U_{n+1}_2| + |sqrt(g^22) * dt * dU_2|) +
-        //            (|sqrt(g^33) * U_n_3| + |sqrt(g^33) * U_{n+1}_3| + |sqrt(g^33) * dt * dU_3|)
-    
-        // Fallback if the gas is perfectly stationary:
-        // if (Norm_mom == 0) Norm_mom = Norm_0; 
-    
-        // Error_1 = 0.25 * sqrt(g^11) * |U_{n+1}_1 - U_n_1 - dt * dU_1| / Norm_mom
-        // Error_2 = 0.25 * sqrt(g^22) * |U_{n+1}_2 - U_n_2 - dt * dU_2| / Norm_mom
-        // Error_3 = 0.25 * sqrt(g^33) * |U_{n+1}_3 - U_n_3 - dt * dU_3| / Norm_mom
-    
-    // Total_Gas_Error = Error_0 + Error_1 + Error_2 + Error_3
-// 6. Calculate the relative error for the radiation variables
-    // Energy:
-        // Norm_rad_0 = |U_n_RAD_0| + |U_{n+1}_RAD_0| + |dt * dU_RAD_0|
-        // Error_rad_0 = 0.25 * |U_{n+1}_RAD_0 - U_n_RAD_0 + dt * dU_RAD_0| / Norm_rad_0
-    // Momentum:
-        // Combine the scale of all 3 momentum directions into one norm
-        // Norm_rad_mom = (|sqrt(g^11) * U_n_RAD_1| + |sqrt(g^11) * U_{n+1}_RAD_1| + |sqrt(g^11) * dt * dU_RAD_1|) +
-        //                (|sqrt(g^22) * U_n_RAD_2| + |sqrt(g^22) * U_{n+1}_RAD_2| + |sqrt(g^22) * dt * dU_RAD_2|) +
-        //                (|sqrt(g^33) * U_n_RAD_3| + |sqrt(g^33) * U_{n+1}_RAD_3| + |sqrt(g^33) * dt * dU_RAD_3|)
-        // Fallback if the radiation is perfectly stationary:
-        // if (Norm_rad_mom == 0) Norm_rad_mom = Norm_rad_0;
-        // Error_rad_1 = 0.25 * sqrt(g^11) * |U_{n+1}_RAD_1 - U_n_RAD_1 + dt * dU_RAD_1| / Norm_rad_mom
-        // Error_rad_2 = 0.25 * sqrt(g^22) * |U_{n+1}_RAD_2 - U_n_RAD_2 + dt * dU_RAD_2| / Norm_rad_mom
-        // Error_rad_3 = 0.25 * sqrt(g^33) * |U_{n+1}_RAD_3 - U_n_RAD_3 + dt * dU_RAD_3| / Norm_rad_mom
-        // Total_Rad_Error = Error_rad_0 + Error_rad_1 + Error_rad_2 + Error_rad_3
-    
-    // Total error = Total_Gas_Error + Total_Rad_Error. If err < 1.e-12. We don't even need to do the implicit solve. This might be for cases where Gnu is
-    // not stiff.
+    Real ucov_gas[GR_DIM];
+    G.lower(ucon_gas, ucov_gas, k, j, i, loc);
 
-    // Note for future readers: If we evaluated the $\theta$ or $\phi$ direction individually when computing the error, 
-    // the local momentum in that specific direction might be zero, causing a division by zero. By summing all three directions into Norm_mom,
-    // we are essentially dividing by the "total momentum scale" of the fluid cell, which is much safer and more physically meaningful.
-
-
-    // Here we are getting the first u_to_p conversion for the gas variables.
-    int pflag = Inverter::u_to_p<Inverter::Type::kastaun>(G, U, m_u, gam, k, j, i, P_guess, m_p, Loci::center, iter_max, err_tol, false);
-
-    //Now we have to recompute U_guess from P_guess for the gas variables.
-    GRMHD::p_to_u(G, P_guess, m_p, gam, k, j, i, U_guess, m_u, Loci::center);
-    
-    // Calculate source terms from the initial guess of the primitives.
-    calc_Gnu(G, P_guess, m_p, k, j, i, kappa_ep, sigma, gam, Gnu_gdet);
-    
-    // Compute the gas errors
-    Real sqrt_g11 = sqrt(fabs(G.gcon(Loci::center, j, i, 1, 1)));
-    Real sqrt_g22 = sqrt(fabs(G.gcon(Loci::center, j, i, 2, 2)));
-    Real sqrt_g33 = sqrt(fabs(G.gcon(Loci::center, j, i, 3, 3)));
-
-    Real norm_0 = fabs(U(m_u.UU, k, j, i)) + fabs(U_guess(m_u.UU, k, j, i)) + fabs(dt * dU(m_u.UU, k, j, i));
-    Real err_0 = 0.0;
-    if (norm_0 > 0.0) {
-        err_0 = 0.25 * fabs(U_guess(m_u.UU, k, j, i) - U(m_u.UU, k, j, i) - dt * dU(m_u.UU, k, j, i)) / norm_0;
+    for (int mu= 0; mu < GR_DIM; mu++){
+        calc_tensor_m1(G, P, m_p, k, j, i, loc, Rij[mu]);
     }
+    Real Rtt = 0.0;
 
-    Real norm_mom = 
-        (sqrt_g11 * fabs(U(m_u.U1, k, j, i)) + sqrt_g11 * fabs(U_guess(m_u.U1, k, j, i)) + sqrt_g11 * fabs(dt * dU(m_u.U1, k, j, i))) +
-        (sqrt_g22 * fabs(U(m_u.U2, k, j, i)) + sqrt_g22 * fabs(U_guess(m_u.U2, k, j, i)) + sqrt_g22 * fabs(dt * dU(m_u.U2, k, j, i))) +
-        (sqrt_g33 * fabs(U(m_u.U3, k, j, i)) + sqrt_g33 * fabs(U_guess(m_u.U3, k, j, i)) + sqrt_g33 * fabs(dt * dU(m_u.U3, k, j, i)));
-
-    if (norm_mom == 0.0) norm_mom = norm_0;
-
-    // Momentum Errors
-    Real err_1 = 0.25 * sqrt_g11 * fabs(U_guess(m_u.U1, k, j, i) - U(m_u.U1, k, j, i) - dt * dU(m_u.U1, k, j, i)) / norm_mom;
-    Real err_2 = 0.25 * sqrt_g22 * fabs(U_guess(m_u.U2, k, j, i) - U(m_u.U2, k, j, i) - dt * dU(m_u.U2, k, j, i)) / norm_mom;
-    Real err_3 = 0.25 * sqrt_g33 * fabs(U_guess(m_u.U3, k, j, i) - U(m_u.U3, k, j, i) - dt * dU(m_u.U3, k, j, i)) / norm_mom;
-
-    Real total_gas_error = err_0 + err_1 + err_2 + err_3;
-
-    //Radiation errors
-    Real total_rad_error = 0.0;
-
-    //Final error
-    Real total_error = total_gas_error + total_rad_error;
-    
-
-    if(total_error < 1e-12){
-        // Skip implicit solve for this cell, for this we use flag = 0;
-        return 0;
-    }else{
-        // Proceed with implicit solve, for this we use flag = 1;
-        return 1;
+    for (int mu=0; mu<GR_DIM; ++mu) {
+        for (int nu=0; nu<GR_DIM; ++nu) {
+            Rtt += - Rij[mu][nu] * ucon_gas[nu] * ucov_gas[mu]; 
+        }
     }
 }
 
-KOKKOS_INLINE_FUNCTION void ImplicitSolver(
-    const GRCoordinates& G, const VarMap& m_p, const VarMap& m_u, 
-    VariablePack<Real>& P_guess, VariablePack<Real>& U_guess, const VariablePack<Real>& U, const VariablePack<Real>& dU, 
-    const Real dt, const int k, const int j, const int i, 
-    GReal* Gnu_gdet, const int iter_max, const Real err_tol, const Real gam, const Real kappa_ep, const Real sigma)
+KOKKOS_INLINE_FUNCTION int SolveImplicitLab4DPrimitives(
+    const GRCoordinates& G, const const VariablePack<Real>& P_guess, const VarMap& m_p, 
+    const int k, const int j, const int i, 
+    const Real kappa_ep, const Real sigma, const Real gam, 
+    Real Gnu_gdet[GR_DIM], Real Rtt_ff)
 {
-    // This function will use the secant method to update the radiation variables.
-    // There might be a better way to do this, I'm sure...
     
-    Real R_old[4], R_curr[4], R_new[4];
-    Real Residual_old[4], Residual_curr[4];
-    
-    int rad_indices[4] = {m_u.UU_RAD, m_u.U1_RAD, m_u.U2_RAD, m_u.U3_RAD};
-    int gas_indices[4] = {m_u.UU, m_u.U1, m_u.U2, m_u.U3};
-    
-    for(int d = 0; d < 4; ++d) {
-        // Set the initial guess for R to the current inverted value from the initial guess.
-        R_curr[d] = U_guess(rad_indices[d], k, j, i);
-
-        // For the secant method's first step, we need a slight perturbation for R_old
-        R_old[d] = R_curr[d] * 0.999 + 1e-15; 
-        
-        // Residual = R_{guess} - R_n + dt * Gnu_guess
-        // dR/dt = -Gnu, so R_np1 = R_n - dt * Gnu
-        Residual_curr[d] = R_curr[d] - U(rad_indices[d], k, j, i) + dt * Gnu_gdet[d];
-        Residual_old[d] = Residual_curr[d]; // Will be updated in loop
-    }
-
-    int iter = 0;
-    int iter_max_secant = 10;
-    int err_tol_secant = 1.e-12;
-    Real max_res = 1.0;
-
-    while (iter < iter_max_secant && max_res > err_tol_secant) {
-        max_res = 0.0;
-        
-        for(int d = 0; d < 4; ++d) {
-            Real dRes = Residual_curr[d] - Residual_old[d];
-            
-            // This could be zero, therefore I will redefine it as 1e-16, just cause it's the double precision limit, but we can change it if we want.
-            if (fabs(dRes) < 1e-16) {
-                R_new[d] = R_curr[d]; 
-            } else {
-                // Here we update the new try with the secant method formula
-                // x_{new} = x - Res(x) * (x - x_{old}) / (Res(x) - Res(x_{old}))
-                R_new[d] = R_curr[d] - Residual_curr[d] * (R_curr[d] - R_old[d]) / dRes;
-            }
-            
-            // Update history
-            R_old[d] = R_curr[d];
-            Residual_old[d] = Residual_curr[d];
-            R_curr[d] = R_new[d];
-            
-            // Update local state for next evaluation
-            U_guess(rad_indices[d], k, j, i) = R_curr[d];
-        }
-
-        // Re-evaluate Physics with R_curr (New Guess)
-        // Sadowski Eq 56 principle: U_gas_{new} is linked to R_{new} via conservation
-        for(int d = 0; d < 4; ++d) {
-            U_guess(gas_indices[d], k, j, i) = U(gas_indices[d], k, j, i) + dt * dU(gas_indices[d], k, j, i) - (R_curr[d] - U(rad_indices[d], k, j, i));
-        }
-
-        // Invert to Primitives and Re-calculate Gnu
-    
-        Inverter::u_to_p<Inverter::Type::kastaun>(G, U_guess, m_u, gam, k, j, i, P_guess, m_p, Loci::center, iter_max, err_tol, false);
-        GRMHD::p_to_u(G, P_guess, m_p, gam, k, j, i, U_guess, m_u, Loci::center);
-        
-        calc_Gnu(G, P_guess, m_p, k, j, i, kappa_ep, sigma, gam, Gnu_gdet); // Recalculate Gnu with the new guess. Here we are just using a placeholder since we don't have the actual physics implemented yet.
-
-        //Compute New Residuals
-        for(int d = 0; d < 4; ++d) {
-            Residual_curr[d] = R_curr[d] - U(rad_indices[d], k, j, i) + dt * Gnu_gdet[d];
-            if (fabs(Residual_curr[d]) > max_res) max_res = fabs(Residual_curr[d]);
-        }
-        
-        iter++;
-    }
 }
 
 // This function will be a wrapper for the different implicit methods used to calculate the radiation four-force.
 // For now I'm following Cora's advice to solely implement the secant method. It has no safe guards.
-TaskStatus RadM1::AddImplicitRadiationSourceTerms(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDomain domain)
+TaskStatus RadM1::RadiationImplicitRoutine(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDomain domain)
 {
 
     auto pmb0 = md->GetBlockData(0)->GetBlockPointer();
@@ -722,25 +523,15 @@ TaskStatus RadM1::AddImplicitRadiationSourceTerms(MeshData<Real> *md, MeshData<R
     const Real gam = pmb0->packages.Get("GRMHD")->Param<Real>("gamma");
     // Get from inverter package. Errors and tolerances
     auto &pars_inverter = pmb0->packages.Get("Inverter")->AllParams();
-    const int iter_max = pmb0->packages.Get("Inverter")->Param<int>("iter_max");
-    const Real err_tol = pmb0->packages.Get("Inverter")->Param<Real>("err_tol");
 
-    // For the shock tube
-    // const Real kappa_ep = pmb0->packages.Get("radM1")->Param<Real>("kappa_ep");
-    // const Real sigma = pmb0->packages.Get("radM1")->Param<Real>("sigma");
-
-    // get units from units package:
-    const Real length_unit = pmb0->packages.Get("Units")->Param<Real>("length_unit_cgs");
-    const Real rho_unit = pmb0->packages.Get("Units")->Param<Real>("rho_scale");
-    const Real kappa_ep = 0.4 * rho_unit * length_unit; //kappa_ep has units of cm^2/g, 
-    const Real sigma = 3.085e9 * length_unit; // sigma has units of cm^(-1)
+    //This is the threshold for determining if MHD or RAD dominate.
+    const Real RADIMPLICITTHREASHOLD = 1e-2;
 
     // Pack Conserved Variables
     PackIndexMap cons_map;
     auto U = md->PackVariables(std::vector<MetadataFlag>{Metadata::Conserved}, cons_map);
     const VarMap m_u(cons_map, true); // Now map is safely populated
 
-    // Pack Primitive Variables
     PackIndexMap prim_map;
     auto P = md->PackVariables(std::vector<MetadataFlag>{Metadata::GetUserFlag("Primitive")}, prim_map);
     const VarMap m_p(prim_map, false);
@@ -748,9 +539,12 @@ TaskStatus RadM1::AddImplicitRadiationSourceTerms(MeshData<Real> *md, MeshData<R
     const Real dt =  pmb0->packages.Get("Globals")->Param<Real>("dt_last"); // I have no idea if this is the way to get the last dt, but I assume it is. Copied straight out of hubble.cpp
     auto dU = mdudt->PackVariables(std::vector<MetadataFlag>{Metadata::Conserved});
 
-    
     auto U_guess = md->PackVariables(std::vector<MetadataFlag>{Metadata::GetUserFlag("RadGuessU")});
     auto P_guess = md->PackVariables(std::vector<MetadataFlag>{Metadata::GetUserFlag("RadGuessP")});
+    auto U_guess_init = md->PackVariables(std::vector<MetadataFlag>{Metadata::GetUserFlag("RadGuessU")});
+    auto P_guess_init = md->PackVariables(std::vector<MetadataFlag>{Metadata::GetUserFlag("RadGuessP")});
+
+
     // Get Loop Bounds
     const IndexRange ib = mdudt->GetBoundsI(IndexDomain::interior);
     const IndexRange jb = mdudt->GetBoundsJ(IndexDomain::interior);
@@ -759,26 +553,58 @@ TaskStatus RadM1::AddImplicitRadiationSourceTerms(MeshData<Real> *md, MeshData<R
 
     pmb0->par_for("Implicit_Gnu_calculation", block.s, block.e, kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
         KOKKOS_LAMBDA (const int& b, const int &k, const int &j, const int &i) {
-            GReal local_Gnu_gdet[GR_DIM];
+            
+            //get state after advection and geometry source terms for conserved variables.
+            //The P variables will be a reasonable estimate of primitives.
+            //Now I need to perform both PtoU convertion in gas and primitives
+            BlockPtoU(pmb0->GetBlockData(b), IndexDomain::interior, false); //Radiation
+            GRMHD::p_to_u(G, P, m_p, gam, k, j, i, U, m_u, Loci::center); //GRMHD
 
-            int proceed_with_implicit = SetImplicitInitialGuess( 
-                G, m_p, m_u, U(b), U_guess(b), P_guess(b), dU(b), dt, k, j, i, local_Gnu_gdet, iter_max, err_tol, gam, kappa_ep, sigma
-            );
+            P_guess = P;
+            U_guess = U;
+            U_guess_init = U;
+            P_guess_init = P;
 
-            if(proceed_with_implicit) {
-                // Refine Gnu using the implicit solver.
-                ImplicitSolver(G, m_p, m_u, P_guess(b), U_guess(b), U(b), dU(b), dt, k, j, i, local_Gnu_gdet, iter_max, err_tol, gam, kappa_ep, sigma);
+
+            //Now we calculate Ehat, which is E in the fluid frame.
+            //Depending on it's value, we'll define if the cell is RAD or MHD dominated.
+            Real ugas_con[GR_DIM];
+            GRMHD::calc_ucon(G, ugas_con, k, j, i, Loci::center);
+            Ehat = - calc_Rtt_ff(G, P, m_p, k, j, i, Loci::center, ugas_con); // This is R^{tt} in the fluid frame.
+
+            // 0 means start by assuming MHD dominates and 1 means that assume RAD dominates.
+            int start_with = 0;
+            if(Ehat < RADIMPLICITTHREASHOLD * P_guess(m_p.UU, k, j, i)) start_with = 1;
+            int nimplicit_iter = 0;
+            int iter_max = 1;
+            int success;
+            for(nimplicit_iter = 0; nimplicit_iter < iter_max; ++nimplicit_iter){
+                success = 0;
+
+                //First we are gonna try the first case;
+                if (success != 1){
+                    P_guess = P_guess_init;
+                    U_guess = U_guess_init;
+
+                    success = SolveImplicitLab4DPrimitives(G, U_guess, P_guess, m_p, k, j, i, kappa_ep, sigma, gam, Gnu_gdet, Ehat, P);
+                }
+
+                //switch params MHD <--> RAD
+                if (success != 1){
+                    P_guess = P_guess_init;
+                    U_guess = U_guess_init;
+
+                    success = SolveImplicitLab4DPrimitives(G, U_guess, P_guess, m_p, k, j, i, kappa_ep, sigma, gam, Gnu_gdet, Ehat, P);
+                }
+
+                // use entropy fluid frame equations and switch MHD <->RAD
+                if (sucess != 1){
+                    P_guess = P_guess_init;
+                    U_guess = U_guess_init;
+
+                    success = SolveImplicitLab4DPrimitives(G, U_guess, P_guess, m_p, k, j, i, kappa_ep, sigma, gam, Gnu_gdet, Ehat, P);
+                }
             }
-
-            dU(b, m_u.UU, k, j, i) += local_Gnu_gdet[0];
-            dU(b, m_u.U1, k, j, i) += local_Gnu_gdet[1];
-            dU(b, m_u.U2, k, j, i) += local_Gnu_gdet[2];
-            dU(b, m_u.U3, k, j, i) += local_Gnu_gdet[3];
-
-            dU(b, m_u.UU_RAD, k, j, i) -= local_Gnu_gdet[0];
-            dU(b, m_u.U1_RAD, k, j, i) -= local_Gnu_gdet[1];
-            dU(b, m_u.U2_RAD, k, j, i) -= local_Gnu_gdet[2];
-            dU(b, m_u.U3_RAD, k, j, i) -= local_Gnu_gdet[3];
         }
     );
 

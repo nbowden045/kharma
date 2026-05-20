@@ -83,9 +83,6 @@ KOKKOS_INLINE_FUNCTION Real calc_kscattering(Real rho, Real T) {
 
 
 
-
-
-
 // Global Lorentz Factor for Radiation
 template<typename Global>
 KOKKOS_INLINE_FUNCTION Real lorentz_calc_rad(const GRCoordinates& G, const Global& P, const VarMap& m, const int& k, const int& j, const int& i, const Loci loc) {
@@ -134,6 +131,7 @@ KOKKOS_INLINE_FUNCTION void calc_ucon_rad(const GRCoordinates& G, const Local& P
 KOKKOS_INLINE_FUNCTION void calc_4vecs(const GRCoordinates& G, const VariablePack<Real>& P, const VarMap& m,
                                        const int& k, const int& j, const int& i, const Loci loc, FourVectors& D_rad)
 {
+    
     calc_ucon_rad(G, P, m, k, j, i, loc, D_rad.ucon);
     G.lower(D_rad.ucon, D_rad.ucov, k, j, i, loc);
 }
