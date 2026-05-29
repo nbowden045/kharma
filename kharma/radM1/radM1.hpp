@@ -45,6 +45,15 @@
 
 namespace RadM1 {
 
+// Denote implicit solve failures (rflags)
+// This enum should grow to cover any potential flags
+enum class Status{success=0, fluidsolve, failure};
+
+static const std::map<int, std::string> status_names = {
+    {(int) Status::fluidsolve, "RadM1 UtoP Failure"},
+    {(int) Status::failure, "RadM1 Step Failure"}
+};
+
 TaskStatus BlockPtoU(MeshBlockData<Real> *rc, IndexDomain domain, bool coarse = false);
 /**
  * Initialize the radM1 package with several options from the input deck
@@ -65,6 +74,12 @@ TaskStatus BlockUtoP(MeshBlockData<Real> *rc, IndexDomain domain, bool coarse=fa
  * Apply floors to the radiation energy variables. 
  */
 void ApplyRadM1Floors(MeshBlockData<Real> *rc, IndexDomain domain);
+
+/**
+ * Anything printed post-step
+ */
+TaskStatus PostStepDiagnostics(const SimTime& tm, MeshData<Real> *md);
+
 /*
 * These are just place holders to calculate G^\nu following Eq.16 Mckinney et al 2014.
 * Should check if it should be G^\nu or G_\nu (ASK BEN).
@@ -84,7 +99,8 @@ KOKKOS_INLINE_FUNCTION Real calc_kscattering(Real rho, Real T) {
 
 // Global Lorentz Factor for Radiation
 template<typename Global>
-KOKKOS_INLINE_FUNCTION Real lorentz_calc_rad(const GRCoordinates& G, const Global& P, const VarMap& m, const int& k, const int& j, const int& i, const Loci loc) {
+KOKKOS_INLINE_FUNCTION Real lorentz_calc_rad(const GRCoordinates& G, const Global& P, const VarMap& m, const int& k, const int& j, const int& i, const Loci loc)
+{
     Real qsq = G.gcov(loc, j, i, 1, 1) * P(m.U1_RAD, k, j, i) * P(m.U1_RAD, k, j, i) +
                G.gcov(loc, j, i, 2, 2) * P(m.U2_RAD, k, j, i) * P(m.U2_RAD, k, j, i) +
                G.gcov(loc, j, i, 3, 3) * P(m.U3_RAD, k, j, i) * P(m.U3_RAD, k, j, i) +
@@ -196,4 +212,57 @@ KOKKOS_INLINE_FUNCTION void initialize_radiation_pressure(Real UU, Real * UU_rad
 
     return;
 }
+
+// TODO import these from matrix.hpp
+KOKKOS_INLINE_FUNCTION
+void adjoint(Real m[16], Real adjOut[16]) {
+  adjOut[0] = MINOR(m, 1, 2, 3, 1, 2, 3);
+  adjOut[1] = -MINOR(m, 0, 2, 3, 1, 2, 3);
+  adjOut[2] = MINOR(m, 0, 1, 3, 1, 2, 3);
+  adjOut[3] = -MINOR(m, 0, 1, 2, 1, 2, 3);
+
+  adjOut[4] = -MINOR(m, 1, 2, 3, 0, 2, 3);
+  adjOut[5] = MINOR(m, 0, 2, 3, 0, 2, 3);
+  adjOut[6] = -MINOR(m, 0, 1, 3, 0, 2, 3);
+  adjOut[7] = MINOR(m, 0, 1, 2, 0, 2, 3);
+
+  adjOut[8] = MINOR(m, 1, 2, 3, 0, 1, 3);
+  adjOut[9] = -MINOR(m, 0, 2, 3, 0, 1, 3);
+  adjOut[10] = MINOR(m, 0, 1, 3, 0, 1, 3);
+  adjOut[11] = -MINOR(m, 0, 1, 2, 0, 1, 3);
+
+  adjOut[12] = -MINOR(m, 1, 2, 3, 0, 1, 2);
+  adjOut[13] = MINOR(m, 0, 2, 3, 0, 1, 2);
+  adjOut[14] = -MINOR(m, 0, 1, 3, 0, 1, 2);
+  adjOut[15] = MINOR(m, 0, 1, 2, 0, 1, 2);
+}
+
+KOKKOS_INLINE_FUNCTION
+Real MINOR(Real m[16], int r0, int r1, int r2, int c0, int c1, int c2) {
+  return m[4 * r0 + c0] *
+             (m[4 * r1 + c1] * m[4 * r2 + c2] - m[4 * r2 + c1] * m[4 * r1 + c2]) -
+         m[4 * r0 + c1] *
+             (m[4 * r1 + c0] * m[4 * r2 + c2] - m[4 * r2 + c0] * m[4 * r1 + c2]) +
+         m[4 * r0 + c2] *
+             (m[4 * r1 + c0] * m[4 * r2 + c1] - m[4 * r2 + c0] * m[4 * r1 + c1]);
+}
+
+KOKKOS_INLINE_FUNCTION
+Real determinant(Real m[16]) {
+  return m[0] * MINOR(m, 1, 2, 3, 1, 2, 3) - m[1] * MINOR(m, 1, 2, 3, 0, 2, 3) +
+         m[2] * MINOR(m, 1, 2, 3, 0, 1, 3) - m[3] * MINOR(m, 1, 2, 3, 0, 1, 2);
+}
+
+KOKKOS_INLINE_FUNCTION
+void matrixInverse4x4(Real mat[4][4], Real matinv[4][4]) {
+  adjoint(&(mat[0][0]), &(matinv[0][0]));
+
+  Real det = determinant(&(mat[0][0]));
+  for (int i = 0; i < 4; i++) {
+    for (int j = 0; j < 4; j++) {
+      matinv[i][j] /= det;
+    }
+  }
+}
+
 }

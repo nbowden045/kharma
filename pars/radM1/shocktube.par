@@ -73,8 +73,7 @@ dt = 0.1
 <debug>
 verbose = 1
 extra_checks = 2
-flag_verbose = 1
-
+flag_verbose = 2
 
 <radM1>
 on = true

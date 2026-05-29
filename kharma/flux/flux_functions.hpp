@@ -341,7 +341,7 @@ KOKKOS_FORCEINLINE_FUNCTION void prim_to_flux(const GRCoordinates& G, const Glob
 
 
     // Out of the package modification RADM1.
-    if(m_u.U1_RAD >= 0){
+    if(m_u.U1_RAD >= 0) {
         // First calculate the radiation tensor
         // Real R[GR_DIM];
         // const Real UU_rad = P(m_p.UU_RAD, k, j, i);
@@ -473,8 +473,7 @@ KOKKOS_FORCEINLINE_FUNCTION void vchar_rad(const GRCoordinates& G, const Local& 
     GReal cs2 = m::min(1./3., m::pow(4./(3.*tau), 2.));
 
     // Check if cs2 < gam - 1. or if it's greater than 1
-    // TODORAD double check 
-    clip(cs2, gam -1., 1.);
+    cs2 = clip(cs2, gam - 1., 1.);
 
     GReal cms2 = cs2;
      // Require that speed of wave measured by observer q.ucon is cms2

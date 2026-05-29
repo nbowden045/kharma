@@ -583,7 +583,7 @@ void KBoundaries::ApplyBoundary(std::shared_ptr<MeshBlockData<Real>> &rc, IndexD
         } else {
             B_FluxCT::BlockUtoP(rc.get(), domain, coarse);
         }
-        Flux::BlockPtoU(rc.get(), domain, coarse);
+        Flux::BlockPtoU(rc.get(), domain, coarse); // TODO(CEP) U on ghosts should not matter?
     } else {
         // 2. Exchange/prolongate/restrict CONSERVED variables: (KHARMA driver)
         //    Conserved variables are marked FillGhost, plus FLUID PRIMITIVES.

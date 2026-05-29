@@ -71,9 +71,9 @@ TaskCollection KHARMADriver::MakeImExTaskCollection(BlockList_t &blocks, int sta
     const bool use_b_ct = pkgs.count("B_CT");
     const bool use_electrons = pkgs.count("Electrons");
     const bool use_fofc = flux_pkg.Get<bool>("use_fofc");
-    const bool use_implicit = pkgs.count("Implicit");
+    const bool use_implicit_package = pkgs.count("Implicit");
     const bool use_jcon = pkgs.count("Current");
-    const bool use_linesearch = (use_implicit) ? pkgs.at("Implicit")->Param<bool>("linesearch") : false;
+    const bool use_linesearch = (use_implicit_package) ? pkgs.at("Implicit")->Param<bool>("linesearch") : false;
     const bool emhd_enabled = pkgs.count("EMHD");
     const bool use_ideal_guess = (emhd_enabled) ? pkgs.at("GRMHD")->Param<bool>("ideal_guess") : false;
     //Out of the package modification RADM1.
@@ -106,7 +106,7 @@ TaskCollection KHARMADriver::MakeImExTaskCollection(BlockList_t &blocks, int sta
             pmesh->mesh_data.Add("fofc_source");
             pmesh->mesh_data.Add("fofc_guess");
         }
-        if (use_implicit) {
+        if (use_implicit_package) {
             // When solving, we need a temporary copy with any explicit updates,
             // but not overwriting the beginning- or mid-step values
             pmesh->mesh_data.Add("solver");
@@ -221,7 +221,7 @@ TaskCollection KHARMADriver::MakeImExTaskCollection(BlockList_t &blocks, int sta
         auto t_explicit = t_explicit_UtoP;
 
         auto t_implicit = t_explicit;
-        if (use_implicit) {
+        if (use_implicit_package) {
             // Extra containers for implicit solve
             std::shared_ptr<MeshData<Real>> &md_linesearch = (use_linesearch) ? pmesh->mesh_data.GetOrAdd("linesearch", i) : md_solver;
 
@@ -262,13 +262,9 @@ TaskCollection KHARMADriver::MakeImExTaskCollection(BlockList_t &blocks, int sta
                                     md_solver.get(), md_sub_step_final.get());
             t_implicit = tl.AddTask(t_implicit_step, WeightedSumDataFace<MetadataFlag>, std::vector<MetadataFlag>({Metadata::Face}),
                                     md_solver.get(), md_solver.get(), 1.0, 0.0, md_sub_step_final.get());
-        }
-
-        // Out of the package modification for RADM1.
-        auto t_rad1_solve = t_implicit;
-        if (use_radm1) {
-            // We pass the final explicit/implicit fluid state as both our input and target container
-            t_rad1_solve = tl.AddTask(t_implicit, RadM1::Step, 
+        } else if (use_radm1) {
+            // This encompasses UtoP for the fluid variables, and the update to 
+            t_implicit = tl.AddTask(t_explicit, RadM1::Step, 
                                       md_full_step_init.get(), 
                                       md_sub_step_init.get(), 
                                       md_sub_step_final.get(), 
@@ -281,7 +277,7 @@ TaskCollection KHARMADriver::MakeImExTaskCollection(BlockList_t &blocks, int sta
         // With an extra ghost zone, this *should* still allow binary-similar evolution between numbers of mesh blocks,
         // but hasn't been tested to do so yet.
         // Out of the package modification for RADM1.
-        auto t_floors = tl.AddTask(t_rad1_solve, Packages::MeshApplyFloors, md_sub_step_final.get(), IndexDomain::interior);
+        auto t_floors = tl.AddTask(t_implicit, Packages::MeshApplyFloors, md_sub_step_final.get(), IndexDomain::interior);
 
         KHARMADriver::AddBoundarySync(t_floors, tl, md_sync);
     }
@@ -305,7 +301,7 @@ TaskCollection KHARMADriver::MakeImExTaskCollection(BlockList_t &blocks, int sta
             t_fix_utop = tl.AddTask(t_none, Inverter::MeshFixUtoP, md_sub_step_final.get());
         }
         auto t_fix_solve = t_fix_utop;
-        if (use_implicit) {
+        if (use_implicit_package) {
             t_fix_solve = tl.AddTask(t_fix_utop, Implicit::MeshFixSolve, md_sub_step_final.get());
         }
 

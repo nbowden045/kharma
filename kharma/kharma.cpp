@@ -323,6 +323,21 @@ void KHARMA::FixParameters(ParameterInput *pin, bool is_parthenon_restart)
         pib = pib->pnext;
     }
 
+    // Required configuration for the rest of the code, from M1
+    if (pin->GetOrAddBoolean("radM1", "on", false)) {
+        // Require units package
+        pin->SetBoolean("units", "on", true);
+        // Force corrected connection coeffs, they are necessary for M1
+        pin->SetBoolean("coordinates", "correct_connections", true);
+        // Mark GRMHD variables as implicitly evolved if RadM1 interaction is enabled
+        // (but note we're not using the Implicit package to do it!)
+        if (pin->GetOrAddBoolean("RadM1", "implicit", true)) {
+            pin->SetBoolean("GRMHD", "implicit", true);
+        }
+        // Force light crossing timestep
+        //pin->SetBoolean("parthenon/time", "use_dt_light", true);
+    }
+
     EndFlag();
 }
 
@@ -431,13 +446,13 @@ Packages_t KHARMA::ProcessPackages(std::unique_ptr<ParameterInput> &pin)
         auto t_wind = tl.AddTask(t_grmhd, KHARMA::AddPackage, packages, Wind::Initialize, pin.get());
     }
 
-     //Enable radiation package. Out of the package modification units.
+    // Enable radiation package. Out of the package modification units.
     if (pin->GetOrAddBoolean("units", "on", false)) {
         auto t_units = tl.AddTask(t_grmhd, KHARMA::AddPackage, packages, Units::Initialize, pin.get());
     }
-
-    //Enable radiation package. Out of the package modification RADM1.
-    if (pin->GetOrAddBoolean("radM1", "on", false)) {
+    // Enable radiation package. Out of the package modification RADM1.
+    bool use_radm1 = pin->GetOrAddBoolean("radM1", "on", false);
+    if (use_radm1) {
         auto t_radM1 = tl.AddTask(t_grmhd, KHARMA::AddPackage, packages, RadM1::Initialize, pin.get());
     }
     // Enable calculating jcon iff it is in any list of outputs (and there's even B to calculate it).
@@ -469,7 +484,7 @@ Packages_t KHARMA::ProcessPackages(std::unique_ptr<ParameterInput> &pin)
     // This lets us just count by flag, rather than checking all the possible parameters that would
     // trigger this
     int n_implicit = PackDimension(packages.get(), Metadata::GetUserFlag("Implicit"));
-    if (n_implicit > 0) {
+    if (n_implicit > 0 && !use_radm1) { // RadM1 has its own implicit update
         KHARMA::AddPackage(packages, Implicit::Initialize, pin.get());
     }
 

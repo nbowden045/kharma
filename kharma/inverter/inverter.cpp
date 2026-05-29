@@ -256,7 +256,8 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
                             P(m_p.UU, k, j, i) = u * rhoh_min/rhoh;
 
                             Real Bvec[] = {0.0, 0.0, 0.0};
-                            SPACELOOP(ii) Bvec[ii] = P(m_u.B1 + ii, k, j, i) * alpha;
+                            if (m_p.B1 >= 0)
+                                SPACELOOP(ii) Bvec[ii] = P(m_p.B1 + ii, k, j, i) * alpha;
                             Real BdotS = 0.;
                             SPACELOOP(ii) BdotS += Bvec[ii] * Scov[ii];
                             Real Bsq = 0.;

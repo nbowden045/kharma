@@ -59,7 +59,8 @@ std::shared_ptr<KHARMAPackage> KHARMADriver::Initialize(ParameterInput *pin, std
     // Mostly, packages should react to e.g. the "sync_prims" option rather than the driver name
     std::vector<std::string> valid_drivers = {"harm", "kharma", "imex", "simple"};
     bool do_emhd = pin->GetOrAddBoolean("emhd", "on", false);
-    std::string driver_type_s = pin->GetOrAddString("driver", "type", (do_emhd) ? "imex" : "kharma", valid_drivers);
+    bool do_radM1 = pin->GetOrAddBoolean("radM1", "on", false);
+    std::string driver_type_s = pin->GetOrAddString("driver", "type", (do_emhd || do_radM1) ? "imex" : "kharma", valid_drivers);
     DriverType driver_type;
     if (driver_type_s == "harm" || driver_type_s == "kharma") {
         driver_type = DriverType::kharma;
