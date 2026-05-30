@@ -38,6 +38,7 @@
 #include "b_ct.hpp"
 #include "grmhd.hpp"
 #include "kharma.hpp"
+#include <stdexcept>
 
 using namespace parthenon;
 
@@ -180,7 +181,8 @@ std::shared_ptr<KHARMAPackage> Flux::Initialize(ParameterInput *pin, std::shared
     params.Add("use_fofc", use_fofc);
 
     if (use_fofc) {
-        // TODO check floors are enabled!  We can't do fofc without them
+        if (!packages->AllPackages().count("Floors"))
+            throw std::runtime_error("First-order Flux Corrections cannot be used without floors!");
 
         // FOFC-specific options
         bool use_glf = pin->GetOrAddBoolean("fofc", "use_glf", false);
