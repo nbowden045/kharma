@@ -6,6 +6,8 @@
 cmake_minimum_required(VERSION 3.10)
 project(kharma LANGUAGES C CXX)
 
+option(KHARMA_BUILD_TESTS "Build unit tests" OFF)
+
 # We follow Parthenon in requiring C++17 going forward
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -77,3 +79,8 @@ add_subdirectory(kharma)
 install(PROGRAMS ${CMAKE_CURRENT_SOURCE_DIR}/run.sh TYPE BIN RENAME "kharma")
 # and our utilities, for fun
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bin/ TYPE BIN)
+
+if (KHARMA_BUILD_TESTS)
+   enable_testing()
+   add_subdirectory(tests/unit)
+endif()

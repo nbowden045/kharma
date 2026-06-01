@@ -8,3 +8,6 @@
 [submodule "external/singularity-opac"]
 	path = external/singularity-opac
 	url = https://github.com/lanl/singularity-opac.git
+[submodule "external/Catch2"]
+	path = external/Catch2
+	url = https://github.com/catchorg/Catch2.git

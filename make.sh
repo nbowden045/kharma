@@ -22,6 +22,7 @@
 # noimplicit: Disable implicit solver, avoids pulling in Kokkos-kernels
 # nocleanup:  Disable magnetic field cleaning code for resizing, avoids
 #             pulling in some unofficial Parthenon code.
+# test:       Build unit tests and register them with CTest
 # Many machine files have additional options, check machines/machinename.sh
 
 # Make processes to use
@@ -82,6 +83,9 @@ EXTRA_FLAGS="-DKHARMA_DISABLE_CLEANUP=1 $EXTRA_FLAGS"
 #fi
 if option "split_implicit"; then
   EXTRA_FLAGS="-DKHARMA_SPLIT_IMPLICIT_SOLVE=1 $EXTRA_FLAGS"
+fi
+if option "test"; then
+  EXTRA_FLAGS="-DKHARMA_BUILD_TESTS=ON $EXTRA_FLAGS"
 fi
 
 ### Enivoronment Prep ###
