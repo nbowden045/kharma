@@ -79,5 +79,5 @@ install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bin/ TYPE BIN)
 
 if (KHARMA_BUILD_TESTS)
    enable_testing()
-   add_subdirectory(tst)
+   add_subdirectory(tests/unit)
 endif()
