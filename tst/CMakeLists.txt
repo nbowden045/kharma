@@ -1,0 +1,76 @@
+cmake_minimum_required(VERSION 3.16)
+
+set(CATCH_INSTALL_DOCS OFF CACHE BOOL "Do not install Catch2 docs")
+set(CATCH_INSTALL_EXTRAS OFF CACHE BOOL "Do not install Catch2 extras")
+set(CATCH_BUILD_TESTING OFF CACHE BOOL "Do not build Catch2 self-tests")
+
+add_subdirectory(
+  ${PROJECT_SOURCE_DIR}/external/Catch2
+  ${CMAKE_BINARY_DIR}/external/Catch2
+)
+
+list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/external/Catch2/extras)
+include(Catch)
+
+set(KHARMA_TEST_INCLUDE_DIRS
+  ${PROJECT_SOURCE_DIR}/kharma
+)
+
+set(KHARMA_UNIT_TEST_SOURCES
+  catch2_define.cpp
+  test_kokkos.cpp
+)
+
+add_executable(kharma_unit_tests ${KHARMA_UNIT_TEST_SOURCES})
+
+target_include_directories(kharma_unit_tests PRIVATE ${KHARMA_TEST_INCLUDE_DIRS})
+
+target_link_libraries(kharma_unit_tests
+  PRIVATE
+    Catch2::Catch2
+    Kokkos::kokkos
+    parthenon
+)
+
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  target_compile_definitions(kharma_unit_tests PRIVATE DEBUG=1)
+else()
+  target_compile_definitions(kharma_unit_tests PRIVATE DEBUG=0)
+endif()
+
+if(KHARMA_TRACE)
+  target_compile_definitions(kharma_unit_tests PRIVATE TRACE=1)
+else()
+  target_compile_definitions(kharma_unit_tests PRIVATE TRACE=0)
+endif()
+
+if(FAST_CARTESIAN)
+  target_compile_definitions(kharma_unit_tests PRIVATE FAST_CARTESIAN=1)
+else()
+  target_compile_definitions(kharma_unit_tests PRIVATE FAST_CARTESIAN=0)
+endif()
+
+if(KHARMA_DISABLE_IMPLICIT)
+  target_compile_definitions(kharma_unit_tests PRIVATE DISABLE_IMPLICIT=1)
+else()
+  target_compile_definitions(kharma_unit_tests PRIVATE DISABLE_IMPLICIT=0)
+endif()
+
+if(KHARMA_DISABLE_CLEANUP)
+  target_compile_definitions(kharma_unit_tests PRIVATE DISABLE_CLEANUP=1)
+else()
+  target_compile_definitions(kharma_unit_tests PRIVATE DISABLE_CLEANUP=0)
+endif()
+
+if(KHARMA_DISABLE_MPI)
+  target_compile_definitions(kharma_unit_tests PRIVATE ENABLE_MPI=0)
+else()
+  target_compile_definitions(kharma_unit_tests PRIVATE ENABLE_MPI=1)
+endif()
+
+target_compile_definitions(kharma_unit_tests PRIVATE USE_FFTW=0)
+
+catch_discover_tests(kharma_unit_tests
+  DISCOVERY_MODE PRE_TEST
+  TEST_PREFIX kharma.unit.
+)

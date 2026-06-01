@@ -22,6 +22,7 @@
 # noimplicit: Disable implicit solver, avoids pulling in Kokkos-kernels
 # nocleanup:  Disable magnetic field cleaning code for resizing, avoids
 #             pulling in some unofficial Parthenon code.
+# test:       Build unit tests and register them with CTest
 # Many machine files have additional options, check machines/machinename.sh
 
 # Make processes to use
@@ -82,6 +83,9 @@ EXTRA_FLAGS="-DKHARMA_DISABLE_CLEANUP=1 $EXTRA_FLAGS"
 #fi
 if option "split_implicit"; then
   EXTRA_FLAGS="-DKHARMA_SPLIT_IMPLICIT_SOLVE=1 $EXTRA_FLAGS"
+fi
+if option "test"; then
+  EXTRA_FLAGS="-DKHARMA_BUILD_TESTS=ON $EXTRA_FLAGS"
 fi
 
 ### Enivoronment Prep ###
@@ -291,12 +295,12 @@ if option "hdf5"; then
 fi
 
 ### Build KHARMA ###
-# If we're doing a clean build, prep the source and
-# delete the build directory
-if option "clean"; then
+# If we're doing a clean build or there is no configured build yet, prep
+# the source. Clean builds also delete the build directory below.
+if option "clean" || [ ! -f build/Makefile ]; then
 
   # Should do this manually when compiling on backend nodes!
-  if [ ! -f external/parthenon/CMakeLists.txt ]; then
+  if [ ! -f external/parthenon/CMakeLists.txt ] || [ ! -f external/Catch2/CMakeLists.txt ]; then
     git submodule update --recursive --init
   fi
 
@@ -321,12 +325,14 @@ if option "clean"; then
     cd -
   fi
 
-  rm -rf build
+  if option "clean"; then
+    rm -rf build
+  fi
 fi
 mkdir -p build
 cd build
 
-if option "clean"; then
+if option "clean" || option "test" || [ ! -f Makefile ]; then
 
   if option "dryrun"; then
     set -x
