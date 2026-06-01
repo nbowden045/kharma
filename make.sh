@@ -295,12 +295,12 @@ if option "hdf5"; then
 fi
 
 ### Build KHARMA ###
-# If we're doing a clean build or there is no configured build yet, prep
-# the source. Clean builds also delete the build directory below.
-if option "clean" || [ ! -f build/Makefile ]; then
+# If we're doing a clean build, prep the source and
+# delete the build directory
+if option "clean"; then
 
   # Should do this manually when compiling on backend nodes!
-  if [ ! -f external/parthenon/CMakeLists.txt ] || [ ! -f external/Catch2/CMakeLists.txt ]; then
+  if [ ! -f external/parthenon/CMakeLists.txt ]; then
     git submodule update --recursive --init
   fi
 
@@ -325,14 +325,12 @@ if option "clean" || [ ! -f build/Makefile ]; then
     cd -
   fi
 
-  if option "clean"; then
-    rm -rf build
-  fi
+  rm -rf build
 fi
 mkdir -p build
 cd build
 
-if option "clean" || option "test" || [ ! -f Makefile ]; then
+if option "clean"; then
 
   if option "dryrun"; then
     set -x
