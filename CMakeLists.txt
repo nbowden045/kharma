@@ -66,6 +66,9 @@ include_directories(external/variant/include)
 # Our hacked-up version of the Kokkos kernels
 include_directories(external/kokkos-kernels)
 
+# Build Singularity-opac
+add_subdirectory(external/singularity-opac)
+
 # Build KHARMA
 add_subdirectory(kharma)
 
