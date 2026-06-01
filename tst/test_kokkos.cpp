@@ -1,3 +1,5 @@
+// This file was generated in part with generative AI
+
 #include <Kokkos_Core.hpp>
 #include <catch2/catch_test_macros.hpp>
 

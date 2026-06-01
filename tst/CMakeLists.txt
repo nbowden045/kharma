@@ -1,3 +1,5 @@
+# This file was generated in part with generative AI
+
 cmake_minimum_required(VERSION 3.16)
 
 set(CATCH_INSTALL_DOCS OFF CACHE BOOL "Do not install Catch2 docs")
@@ -14,6 +16,30 @@ include(Catch)
 
 set(KHARMA_TEST_INCLUDE_DIRS
   ${PROJECT_SOURCE_DIR}/kharma
+  ${PROJECT_SOURCE_DIR}/kharma/prob
+  ${PROJECT_SOURCE_DIR}/kharma/prob/elec
+  ${PROJECT_SOURCE_DIR}/kharma/prob/emhd
+  ${PROJECT_SOURCE_DIR}/kharma/prob/utils
+  ${PROJECT_SOURCE_DIR}/kharma/coordinates
+  ${PROJECT_SOURCE_DIR}/kharma/flux
+  ${PROJECT_SOURCE_DIR}/kharma/b_cd
+  ${PROJECT_SOURCE_DIR}/kharma/b_cleanup
+  ${PROJECT_SOURCE_DIR}/kharma/b_cleanup_gmg
+  ${PROJECT_SOURCE_DIR}/kharma/b_ct
+  ${PROJECT_SOURCE_DIR}/kharma/b_flux_ct
+  ${PROJECT_SOURCE_DIR}/kharma/boundaries
+  ${PROJECT_SOURCE_DIR}/kharma/coord_output
+  ${PROJECT_SOURCE_DIR}/kharma/current
+  ${PROJECT_SOURCE_DIR}/kharma/driver
+  ${PROJECT_SOURCE_DIR}/kharma/electrons
+  ${PROJECT_SOURCE_DIR}/kharma/emhd
+  ${PROJECT_SOURCE_DIR}/kharma/floors
+  ${PROJECT_SOURCE_DIR}/kharma/grmhd
+  ${PROJECT_SOURCE_DIR}/kharma/implicit
+  ${PROJECT_SOURCE_DIR}/kharma/inverter
+  ${PROJECT_SOURCE_DIR}/kharma/ismr
+  ${PROJECT_SOURCE_DIR}/kharma/reductions
+  ${PROJECT_SOURCE_DIR}/kharma/wind
 )
 
 set(KHARMA_UNIT_TEST_SOURCES
