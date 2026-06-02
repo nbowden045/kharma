@@ -3,6 +3,7 @@
 if [[ $HOST == *".polaris.alcf.anl.gov" ]]; then
   HOST_ARCH=ZEN3
   DEVICE_ARCH=AMPERE80
+  NPROC=64
 
   module restore
 
