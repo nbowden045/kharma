@@ -6,10 +6,12 @@ set(CATCH_INSTALL_DOCS OFF CACHE BOOL "Do not install Catch2 docs")
 set(CATCH_INSTALL_EXTRAS OFF CACHE BOOL "Do not install Catch2 extras")
 set(CATCH_BUILD_TESTING OFF CACHE BOOL "Do not build Catch2 self-tests")
 
+if(NOT TARGET Catch2)
 add_subdirectory(
   ${PROJECT_SOURCE_DIR}/external/Catch2
   ${CMAKE_BINARY_DIR}/external/Catch2
 )
+endif()
 
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/external/Catch2/extras)
 include(Catch)
@@ -45,6 +47,7 @@ set(KHARMA_TEST_INCLUDE_DIRS
 set(KHARMA_UNIT_TEST_SOURCES
   catch2_define.cpp
   test_kokkos.cpp
+  test_gray_opacities.cpp
 )
 
 add_executable(kharma_unit_tests ${KHARMA_UNIT_TEST_SOURCES})
@@ -56,6 +59,8 @@ target_link_libraries(kharma_unit_tests
     Catch2::Catch2
     Kokkos::kokkos
     parthenon
+    singularity-opac::flags
+    singularity-eos::singularity-eos
 )
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
