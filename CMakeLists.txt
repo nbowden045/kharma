@@ -68,6 +68,17 @@ include_directories(external/variant/include)
 # Our hacked-up version of the Kokkos kernels
 include_directories(external/kokkos-kernels)
 
+
+# Needed for running singularity-eos tests
+set(SINGULARITY_USE_HDF5 ON CACHE BOOL "" FORCE)
+set(SINGULARITY_USE_SPINER ON CACHE BOOL "" FORCE)
+set(SINGULARITY_USE_SPINER_WITH_HDF5 ON CACHE BOOL "" FORCE)
+set(PARTHENON_DISABLE_HDF5 OFF CACHE BOOL "" FORCE)
+set(SINGULARITY_USE_STELLAR_COLLAPSE ON CACHE BOOL "" FORCE)
+
+# Build Singularity-eos
+add_subdirectory(external/singularity-eos)
+
 # Build Singularity-opac
 add_subdirectory(external/singularity-opac)
 
