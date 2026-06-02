@@ -5,31 +5,59 @@ if [[ $HOST == *".polaris.alcf.anl.gov" ]]; then
   DEVICE_ARCH=AMPERE80
 
   module purge
-  if [[ $ARGS == *"nvhpc233"* ]]; then
-    # DOES NOT WORK: "CUDA 11.4 not installed with this NVHPC"
-    module use /soft/compilers/nvhpc/modulefiles
-    module load PrgEnv-nvhpc nvhpc/23.3
-    # Guide new NVHPC to a working CUDA?
-    # export NVHPC_CUDA_HOME="/opt/nvidia/hpc_sdk/Linux_x86_64/21.9/cuda/11.4"
-    # export NVHPC_DEFAULT_CUDA=11.4
-    # export NVCC_WRAPPER_CUDA_EXTRA_FLAGS="-gpu=cuda11.4"
-    # EXTRA_FLAGS="-DCUDA_TOOLKIT_ROOT_DIR=/opt/nvidia/hpc_sdk/Linux_x86_64/21.9/cuda/11.4 $EXTRA_FLAGS"
-  elif [[ $ARGS == *"nvhpc219"* ]]; then
-    # DOES NOT WORK: compile errors in pmmintrin.h & AVX512 intrinsics headers
-    module load PrgEnv-nvhpc
-    # Correct some vars set by default PrgEnv-nvhpc
-    unset CC CXX F77 F90 FC
-    # Try not to require intrinsics?
-    #HOST_ARCH=BDW
-  elif [[ $ARGS == *"gcc"* ]]; then
-    module load PrgEnv-gnu
-    module load cudatoolkit-standalone
-  else
-    module load PrgEnv-nvhpc nvhpc/23.1
+  #module restore
+
+  # 2. Restore system-native paths for core utilities (like CMake)
+  if [ -f /etc/bashrc ]; then
+    source /etc/bashrc
   fi
+  
+  # Re-enable the ALCF software module tree that purge wiped out
+  module use /soft/modulefiles
+  module use /soft/modulefiles/core
+  
+  #if [[ $ARGS == *"nvhpc233"* ]]; then
+    ## DOES NOT WORK: "CUDA 11.4 not installed with this NVHPC"
+    #module use /soft/compilers/nvhpc/modulefiles
+    #module load PrgEnv-nvhpc nvhpc/23.3
+    ## Guide new NVHPC to a working CUDA?
+    ## export NVHPC_CUDA_HOME="/opt/nvidia/hpc_sdk/Linux_x86_64/21.9/cuda/11.4"
+    ## export NVHPC_DEFAULT_CUDA=11.4
+    ## export NVCC_WRAPPER_CUDA_EXTRA_FLAGS="-gpu=cuda11.4"
+    ## EXTRA_FLAGS="-DCUDA_TOOLKIT_ROOT_DIR=/opt/nvidia/hpc_sdk/Linux_x86_64/21.9/cuda/11.4 $EXTRA_FLAGS"
+  #elif [[ $ARGS == *"nvhpc219"* ]]; then
+    ## DOES NOT WORK: compile errors in pmmintrin.h & AVX512 intrinsics headers
+    #module load PrgEnv-nvhpc
+    ## Correct some vars set by default PrgEnv-nvhpc
+    #unset CC CXX F77 F90 FC
+    ## Try not to require intrinsics?
+  ##HOST_ARCH=BDW
+  if [[ $ARGS == *"gcc"* ]]; then
+      module load PrgEnv-gnu
+      module load cuda
+      #module load cudatoolkit
+  else
+    # Defaulting to the modern system-recommended NVIDIA path
+      module load PrgEnv-nvidia
+      module load cuda
+    #module load cudatoolkit
+  fi
+  #if [[ $ARGS == *"gcc"* ]]; then
+  #  module load PrgEnv-gnu
+  #  module load cudatoolkit-standalone
+  #else
+  #  module load PrgEnv-nvidia
+  #  module load cudatoolkit-standalone
+  #fi
   # Common modules
-  module load cray-hdf5-parallel cmake
+  module load cray-hdf5-parallel
   module load craype-accel-nvidia80
+  #module load cmake/3.30.5
+  
+  # BYPASS LMOD FOR CMAKE: Inject the explicit binary path into your environment
+  export PATH=/soft/modulefiles/cmake/3.30.5/bin:$PATH
+  # Fallback system path if the soft tree is structured differently:
+  export PATH=/usr/bin:/usr/local/bin:$PATH
   
   # Since we ran 'module purge',
   # The Cray wrappers will warn unless we set this
