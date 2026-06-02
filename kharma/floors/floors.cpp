@@ -62,7 +62,7 @@ std::shared_ptr<KHARMAPackage> Floors::Initialize(ParameterInput *pin, std::shar
     // less reliable but velocity reconstructions potentially more robust.
     // Drift frame floors are now available and preferred when using 
     // the implicit solver to avoid UtoP calls.
-    // TODO(BSP) automate/standardize parsing enums like this: classes w/tables like the flags?
+    // TODO(CEP) automate/standardize parsing enums like this: classes w/tables like the flags?
     std::vector<std::string> allowed_floor_frames = {"normal", "fluid", "mixed",
                                                      "mixed_fluid_normal", "mixed_normal_drift", "drift"};
     std::string frame_s = pin->GetOrAddString("floors", "frame", "normal", allowed_floor_frames);
@@ -132,7 +132,7 @@ std::shared_ptr<KHARMAPackage> Floors::Initialize(ParameterInput *pin, std::shar
     pkg->AddField("Floors.u_floor", m);
 
     // Flag for which floor conditions were violated.  Used for diagnostics
-    // TODO(BSP) Should switch these to "Integer" fields when Parthenon supports it
+    // TODO(CEP) Should switch these to "Integer" fields when Parthenon supports it
     pkg->AddField("fflag", m);
     // When not using UtoP, we still need a "dummy" copy of pflag to write the post-flooring flag to
     m = Metadata({Metadata::Real, Metadata::Cell, Metadata::Derived, Metadata::OneCopy, Metadata::Overridable});
@@ -141,8 +141,8 @@ std::shared_ptr<KHARMAPackage> Floors::Initialize(ParameterInput *pin, std::shar
     // Don't actually call the usual floor function if we're using normal frame w/Kastaun,
     // floors will be applied during the inversion call.
     // Also allow manually disabling the call, for testing
-    if (!disable_call && frame != InjectionFrame::normal_kastaun) {
-        // TODO(BSP) THIS IS THE ONLY MeshApplyFloors.  Any others will NOT BE CALLED.
+    if (!disable_call) {
+        // TODO(CEP) THIS IS THE ONLY MeshApplyFloors.  Any others will NOT BE CALLED.
         // Use BlockApplyFloors in your packages or fix Packages::MeshApplyFloors
         pkg->MeshApplyFloors = Floors::ApplyGRMHDFloors;
     }
@@ -247,13 +247,12 @@ TaskStatus Floors::DetermineGRMHDFloors(MeshData<Real> *md, IndexDomain domain,
         KOKKOS_LAMBDA (const int &b, const int &k, const int &j, const int &i) {
             const auto& G = P.GetCoords(b);
             // The inverter might have set some floor flags, so we add to that non-destructively
-            fflag(b, 0, k, j, i) = static_cast<int>(fflag(b, 0, k, j, i)) |
-                                    determine_floors(G, P(b), m_p, gam, k, j, i, floors, floors_inner,
-                                                     floor_vals(b, rhofi, k, j, i), floor_vals(b, ufi, k, j, i));
+            fflag(b, 0, k, j, i) = static_cast<int>(determine_floors(G, P(b), m_p, gam, k, j, i, floors, floors_inner,
+                                                     floor_vals(b, rhofi, k, j, i), floor_vals(b, ufi, k, j, i)));
         }
     );
 
-    // TODO(BSP) if we can somehow guarantee one call/rank we can start the reduction here
+    // TODO(CEP) if we can somehow guarantee one call/rank we can start the reduction here
     //Reductions::StartFlagReduce(md, "fflag", FFlag::flag_names, IndexDomain::interior, true, 0);
 
     return TaskStatus::complete;
