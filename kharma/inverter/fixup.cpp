@@ -55,7 +55,7 @@ TaskStatus Inverter::FixUtoP(MeshBlockData<Real> *rc)
     const bool fix_average = pmb->packages.Get("Inverter")->Param<bool>("fix_average_neighbors");
     const bool fix_atmo = pmb->packages.Get("Inverter")->Param<bool>("fix_atmosphere");
     const bool velrecover = pmb->packages.Get("Inverter")->Param<bool>("vel_recovery");
-    // Velocity recovery replaces other fixups (TODO(CEP) should it always?)
+    // Velocity recovery replaces other fixups (TODO(BSP) should it always?)
     if (velrecover) return Inverter::VelRecover(rc);
     if (!fix_average && !fix_atmo) return TaskStatus::complete;
 
@@ -305,7 +305,7 @@ TaskStatus Inverter::VelRecover(MeshBlockData<Real> *rc)
                 // Reapply ceilings
                 apply_ceilings(G, P, m_p, gam, k, j, i, floors, floors_inner, U, m_u);
                 // Set remaining floors the dumb way if they're still low
-                // TODO(CEP) record
+                // TODO(BSP) record
                 P(m_p.RHO, k, j, i) = m::max(P(m_p.RHO, k, j, i), floors.rho_min_const);
                 P(m_p.UU, k, j, i) = m::max(P(m_p.UU, k, j, i), floors.u_min_const);
 

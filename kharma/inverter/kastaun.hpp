@@ -254,7 +254,7 @@ KOKKOS_INLINE_FUNCTION int u_to_p<Type::kastaun>(const GRCoordinates& G, const V
     KastaunResidual res(D, q, bsq, bsq_rpsq, rsq, rbsq, v0sq, gam);
 
     // SOLVE
-    // TODO(CEP) better or faster solver?  (Optionally) skip bracketing?
+    // TODO(BSP) better or faster solver?  (Optionally) skip bracketing?
     // Need to find initial bracket. Requires separate solve
     Real zm = 0.;
     Real zp = 1.; // This is the lowest specific enthalpy admitted by the EOS
@@ -328,7 +328,7 @@ KOKKOS_INLINE_FUNCTION int u_to_p<Type::kastaun>(const GRCoordinates& G, const V
             fp = f;
         }
     }
-    // TODO(CEP) make sure we really don't want to set P for this case
+    // TODO(BSP) make sure we really don't want to set P for this case
     // is it filled with last step, or zero?
     if (iter >= max_iterations) return static_cast<int>(Status::max_iter);
 

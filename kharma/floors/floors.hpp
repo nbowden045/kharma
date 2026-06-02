@@ -173,7 +173,7 @@ inline Prescription MakePrescription(parthenon::ParameterInput *pin, std::string
  */
 inline Prescription MakePrescriptionInner(parthenon::ParameterInput *pin, Prescription p_outer, std::string block="floors_inner")
 {
-    // TODO(CEP) I wonder if there's an easier way to "set if parameter exists" from pin, that would be broadly useful
+    // TODO(BSP) I wonder if there's an easier way to "set if parameter exists" from pin, that would be broadly useful
     Prescription p_inner;
 
     // Floor parameters

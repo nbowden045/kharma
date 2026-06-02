@@ -62,7 +62,7 @@ std::shared_ptr<KHARMAPackage> Floors::Initialize(ParameterInput *pin, std::shar
     // less reliable but velocity reconstructions potentially more robust.
     // Drift frame floors are now available and preferred when using 
     // the implicit solver to avoid UtoP calls.
-    // TODO(CEP) automate/standardize parsing enums like this: classes w/tables like the flags?
+    // TODO(BSP) automate/standardize parsing enums like this: classes w/tables like the flags?
     std::vector<std::string> allowed_floor_frames = {"normal", "fluid", "mixed",
                                                      "mixed_fluid_normal", "mixed_normal_drift", "drift"};
     std::string frame_s = pin->GetOrAddString("floors", "frame", "normal", allowed_floor_frames);
@@ -132,7 +132,7 @@ std::shared_ptr<KHARMAPackage> Floors::Initialize(ParameterInput *pin, std::shar
     pkg->AddField("Floors.u_floor", m);
 
     // Flag for which floor conditions were violated.  Used for diagnostics
-    // TODO(CEP) Should switch these to "Integer" fields when Parthenon supports it
+    // TODO(BSP) Should switch these to "Integer" fields when Parthenon supports it
     pkg->AddField("fflag", m);
     // When not using UtoP, we still need a "dummy" copy of pflag to write the post-flooring flag to
     m = Metadata({Metadata::Real, Metadata::Cell, Metadata::Derived, Metadata::OneCopy, Metadata::Overridable});
@@ -142,7 +142,7 @@ std::shared_ptr<KHARMAPackage> Floors::Initialize(ParameterInput *pin, std::shar
     // floors will be applied during the inversion call.
     // Also allow manually disabling the call, for testing
     if (!disable_call) {
-        // TODO(CEP) THIS IS THE ONLY MeshApplyFloors.  Any others will NOT BE CALLED.
+        // TODO(BSP) THIS IS THE ONLY MeshApplyFloors.  Any others will NOT BE CALLED.
         // Use BlockApplyFloors in your packages or fix Packages::MeshApplyFloors
         pkg->MeshApplyFloors = Floors::ApplyGRMHDFloors;
     }
@@ -252,7 +252,7 @@ TaskStatus Floors::DetermineGRMHDFloors(MeshData<Real> *md, IndexDomain domain,
         }
     );
 
-    // TODO(CEP) if we can somehow guarantee one call/rank we can start the reduction here
+    // TODO(BSP) if we can somehow guarantee one call/rank we can start the reduction here
     //Reductions::StartFlagReduce(md, "fflag", FFlag::flag_names, IndexDomain::interior, true, 0);
 
     return TaskStatus::complete;
