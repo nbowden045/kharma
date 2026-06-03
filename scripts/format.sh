@@ -34,5 +34,5 @@ echo "You are using ${CF_VRSN}."
 echo "If these differ, results may not be stable."
 
 echo "Formatting..."
-git ls-files -z '*.cpp' '*.hpp' | xargs -0 ${CFM} -style=file -i
+git ls-files -z 'kharma/**/*.cpp' 'kharma/**/*.hpp' | xargs -0 ${CFM} -style=file -i
 echo "...Done"
