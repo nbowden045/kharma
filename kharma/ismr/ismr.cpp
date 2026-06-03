@@ -123,8 +123,7 @@ TaskStatus ISMR::DerefinePoles(MeshData<Real>* md)
                 // fluid variables average
                 pmb->par_for("DerefinePoles_avg_fluid", 0, nvar - 1, bCC.ks, bCC.ke,
                     j_p.s, j_p.e, bCC.is, bCC.ie,
-                             KOKKOS_LAMBDA(const int& v, const int& k, const int& j,
-                                           const int& i)
+                    KOKKOS_LAMBDA (const int &v, const int &k, const int &j, const int &i)
                     {
                         const int coarse_cell_len =
                             m::pow(2, ((binner) ? jps - j : j - jps) + 1);
@@ -136,8 +135,8 @@ TaskStatus ISMR::DerefinePoles(MeshData<Real>* md)
                         const int k_start = k - k_fine;
 
                         // average each var over next `coarse_cell_len` cells
-                        // Lots of repeated ops but we don't care, this is
-                        // applied over a small region
+                        // Lots of repeated ops but we don't care, this is applied over a
+                        // small region
                         Real avg = 0.;
                         for (int ktemp = 0; ktemp < coarse_cell_len; ++ktemp)
                             avg += vars(v, k_start + ktemp, j_c, i);
@@ -147,8 +146,7 @@ TaskStatus ISMR::DerefinePoles(MeshData<Real>* md)
                 // fluid variables write
                 pmb->par_for("DerefinePoles_write_fluid", 0, nvar - 1, bCC.ks, bCC.ke,
                     j_p.s, j_p.e, bCC.is, bCC.ie,
-                             KOKKOS_LAMBDA(const int& v, const int& k, const int& j,
-                                           const int& i)
+                    KOKKOS_LAMBDA (const int &v, const int &k, const int &j, const int &i)
                     {
                         const int j_c = j + ((binner) ? 0 : -1); // cell center
                         vars(v, k, j_c, i) = vars_avg(v, k, j_c, i);
@@ -168,17 +166,16 @@ TaskStatus ISMR::DerefinePoles(MeshData<Real>* md)
                         "prescription");
                 pmb->par_for("DerefinePoles_UtoP", bCC.ks, bCC.ke, j_p.s, j_p.e, bCC.is,
                     bCC.ie,
-                             KOKKOS_LAMBDA(const int& k, const int& j, const int& i)
+                    KOKKOS_LAMBDA (const int &k, const int &j, const int &i)
                     {
                         const int j_c = j + ((binner) ? 0 : -1); // cell center
-                        // The usual inverter is not EMHD-aware, so it's going to
-                        // dump all of T into the ideal GRMHD fluid variables
+                        // The usual inverter is not EMHD-aware, so it's going to dump all
+                        // of T into the ideal GRMHD fluid variables
                         Inverter::u_to_p<Inverter::Type::kastaun>(G, vars_utop, m_u, gam,
-                            k, j_c, i, P, m_p, Loci::center, 8, 1e-8, false);
-                        // Consistent with that, we zero out the EMHD extra
-                        // variables. This switches theories to evolving ideal
-                        // GRMHD in ISMR region, but conserves the components of
-                        // T themselves
+                            k, j_c, i, P, m_p, Loci::center, 25, 1e-12);
+                        // Consistent with that, we zero out the EMHD extra variables.
+                        // This switches theories to evolving ideal GRMHD in ISMR region,
+                        // but conserves the components of T themselves
                         if (m_u.Q >= 0) vars_utop(m_u.Q, k, j_c, i) = 0.;
                         if (m_p.Q >= 0) P(m_p.Q, k, j_c, i) = 0.;
                         if (m_u.DP >= 0) vars_utop(m_u.DP, k, j_c, i) = 0.;

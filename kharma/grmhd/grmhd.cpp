@@ -610,8 +610,8 @@ void CancelBoundaryU3(MeshBlockData<Real>* rc, IndexDomain domain, bool coarse)
                 parthenon::par_for_inner(member, bi.ks, bi.ke,
                     [&](const int& k)
                     {
-                        Inverter::u_to_p<Inverter::Type::kastaun>(G, U, m_u, gam, k, jf,
-                            i, P, m_p, Loci::center, 25, 1e-12, false);
+                        Inverter::u_to_p<Inverter::Type::kastaun>(
+                            G, U, m_u, gam, k, jf, i, P, m_p, Loci::center, 25, 1e-12);
                     });
             }
             member.team_barrier();
@@ -720,7 +720,7 @@ void CancelBoundaryT3(MeshBlockData<Real>* rc, IndexDomain domain, bool coarse)
                     U(m_u.U3, k, jf, i) -= T3_avg;
                     // Recover primitive GRMHD variables from our modified U
                     Inverter::u_to_p<Inverter::Type::kastaun>(
-                        G, U, m_u, gam, k, jf, i, P, m_p, Loci::center, 25, 1e-12, false);
+                        G, U, m_u, gam, k, jf, i, P, m_p, Loci::center, 25, 1e-12);
                     // Floor them
                     int fflag = Floors::apply_geo_floors(
                         G, P, m_p, gam, k, jf, i, floors, floors, Loci::center);
@@ -789,8 +789,7 @@ void UpdateAveragedCtop(MeshData<Real>* md)
                         {
                             FourVectors Dtmp;
                             GRMHD::calc_4vecs(G, P, m_p, k, jf, i, Loci::center, Dtmp);
-                            // Remember our 'cmin' array stores *positive*
-                            // values!
+                            // Remember our 'cmin' array stores *positive* values!
                             Real cmin_minus;
                             Flux::vchar_global(G, P, m_p, Dtmp, gam, emhd_params, k, jf,
                                 i, Loci::center, X1DIR, cmax(V1, k, jf, i), cmin_minus);

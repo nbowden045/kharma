@@ -60,7 +60,7 @@ void B_CT::ZeroBoundaryEMF(MeshBlockData<Real>* rc, IndexDomain domain,
         IndexRange jb = (bdir == 2) ? IndexRange{j_face, j_face} : IndexRange{b.js, b.je};
         IndexRange kb = (bdir == 3) ? IndexRange{k_face, k_face} : IndexRange{b.ks, b.ke};
         pmb->par_for("zero_EMF_" + bname, kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
-                     KOKKOS_LAMBDA(const int& k, const int& j, const int& i)
+            KOKKOS_LAMBDA (const int &k, const int &j, const int &i)
             {
                 emfpack(el, 0, k, j, i) = 0;
             });
@@ -82,7 +82,7 @@ void B_CT::AverageBoundaryEMF(MeshBlockData<Real>* rc, IndexDomain domain,
             // X3 EMF must be zero *on* polar face, since edge size is 0
             IndexRange3 b = KDomain::GetBoundaryRange(rc, domain, el, coarse);
             pmb->par_for("zero_polar_EMF3_" + bname, b.ks, b.ke, b.js, b.je, b.is, b.ie,
-                         KOKKOS_LAMBDA(const int& k, const int& j, const int& i)
+                KOKKOS_LAMBDA (const int &k, const int &j, const int &i)
                 {
                     emfpack(el, 0, k, j, i) = 0;
                 });
@@ -223,13 +223,12 @@ void B_CT::DestructiveBoundaryClean(MeshBlockData<Real>* rc, IndexDomain domain,
             const int last_rank_c = (binner) ? i : i - 1;
             const int outward_sign = (binner) ? -1. : 1.;
             pmb->par_for("correct_face_vector_" + bname, b.ks, b.ke, b.js, b.je, i, i,
-                         KOKKOS_LAMBDA(const int& k, const int& j, const int& i)
+                KOKKOS_LAMBDA (const int &k, const int &j, const int &i)
                 {
-                    // Other faces have been updated, just need to clean
-                    // divergence Subtract off their contributions to find ours.
-                    // Note our partner face contributes differently, depending
-                    // on whether we're the i+1 "outward" face, or the i
-                    // "innward" face
+                    // Other faces have been updated, just need to clean divergence
+                    // Subtract off their contributions to find ours. Note our partner
+                    // face contributes differently, depending on whether we're the i+1
+                    // "outward" face, or the i "innward" face
                     Real new_face = -(-outward_sign) * fpack(F1, 0, k, j, last_rank_f) *
                                         G.Volume<F1>(k, j, last_rank_f) -
                                     (fpack(F2, 0, k, j + 1, last_rank_c) *
@@ -254,7 +253,7 @@ void B_CT::DestructiveBoundaryClean(MeshBlockData<Real>* rc, IndexDomain domain,
             const int last_rank_c = (binner) ? j : j - 1;
             const int outward_sign = (binner) ? -1. : 1.;
             pmb->par_for("correct_face_vector_" + bname, b.ks, b.ke, j, j, b.is, b.ie,
-                         KOKKOS_LAMBDA(const int& k, const int& j, const int& i)
+                KOKKOS_LAMBDA (const int &k, const int &j, const int &i)
                 {
                     Real new_face = -(-outward_sign) * fpack(F2, 0, k, last_rank_f, i) *
                                         G.Volume<F2>(k, last_rank_f, i) -
@@ -280,7 +279,7 @@ void B_CT::DestructiveBoundaryClean(MeshBlockData<Real>* rc, IndexDomain domain,
             const int last_rank_c = (binner) ? k : k - 1;
             const int outward_sign = (binner) ? -1. : 1.;
             pmb->par_for("correct_face_vector_" + bname, k, k, b.js, b.je, b.is, b.ie,
-                         KOKKOS_LAMBDA(const int& k, const int& j, const int& i)
+                KOKKOS_LAMBDA (const int &k, const int &j, const int &i)
                 {
                     Real new_face = -(-outward_sign) * fpack(F3, 0, last_rank_f, j, i) *
                                         G.Volume<F3>(last_rank_f, j, i) -
@@ -343,7 +342,7 @@ void B_CT::ReconnectBoundaryB3(MeshBlockData<Real>* rc, IndexDomain domain,
     parthenon::par_for_outer(DEFAULT_OUTER_LOOP_PATTERN, "reduce_B3_" + bname,
         pmb->exec_space, 0, 1, 0, fpack.GetDim(4) - 1, b.is,
         b.ie - reconnection_outer_buffer,
-        KOKKOS_LAMBDA(parthenon::team_mbr_t member, const int& v, const int& i)
+        KOKKOS_LAMBDA(parthenon::team_mbr_t member, const int &v, const int& i)
         {
             // Sum the first rank of B3
             double B3_sum = 0.;
@@ -369,8 +368,7 @@ void B_CT::ReconnectBoundaryB3(MeshBlockData<Real>* rc, IndexDomain domain,
 
             // Update cell-centered conserved & primitive B, and cell primitive fluid
             // variables, in the zones we touched
-            parthenon::par_for_inner(member, b.ks,
-                b.ke - 1, // iterate over all *cells* k
+            parthenon::par_for_inner(member, b.ks, b.ke - 1, // iterate over all *cells* k
                 [&](const int& k)
                 {
                     P(m_p.B3, k, jf, i) =
@@ -382,7 +380,7 @@ void B_CT::ReconnectBoundaryB3(MeshBlockData<Real>* rc, IndexDomain domain,
 
                     // Recover primitive GRMHD variables from our modified U
                     Inverter::u_to_p<Inverter::Type::kastaun>(
-                        G, U, m_u, gam, k, jf, i, P, m_p, Loci::center, 25, 1e-12, false);
+                        G, U, m_u, gam, k, jf, i, P, m_p, Loci::center, 25, 1e-12);
                     // Floor them
                     // TODO THIS IS IN FLUID FRAME
                     int fflag = Floors::apply_geo_floors(
