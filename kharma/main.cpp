@@ -121,7 +121,7 @@ int main(int argc, char *argv[])
 
     if(MPIRank0()) {
         // Always print the version header, because it's fun
-        // TODO(BSP) proper banner w/refs, names
+        // TODO(CEP) proper banner w/refs, names
         const std::string &version = KHARMA::Version::GIT_VERSION;
         const std::string &branch = KHARMA::Version::GIT_REFSPEC;
         const std::string &sha1 = KHARMA::Version::GIT_SHA1;
@@ -199,7 +199,7 @@ int main(int argc, char *argv[])
     // PostInitialize: Add magnetic field to the problem, initialize ghost zones.
     // Any init which may be run even when restarting, or requires all
     // MeshBlocks to be initialized already.
-    // TODO(BSP) split to package hooks
+    // TODO(CEP) split to package hooks
     auto prob = pin->GetString("parthenon/job", "problem_id");
     bool is_restart = (prob == "resize_restart") || Globals::is_restart;
     if(MPIRank0() && verbose > 0) {

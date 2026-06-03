@@ -83,7 +83,7 @@ void FixParameters(ParameterInput *pin, bool is_parthenon_restart);
  */
 Packages_t ProcessPackages(std::unique_ptr<ParameterInput>& pin);
 
-// TODO(BSP) not sure where to put these
+// TODO(CEP) not sure where to put these
 
 /**
  * Check whether a given field is anywhere in outputs.
