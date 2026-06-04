@@ -54,7 +54,7 @@ u_min_geom = 1e-8
 
 <parthenon/output0>
 file_type = hdf5
-dt = 10.0
+dt = 0.0
 single_precision_output = true
 # Fields beginning with a specifier here will be included (e.g., all prims.XXX)
 # Fields specified but not present are silently skipped

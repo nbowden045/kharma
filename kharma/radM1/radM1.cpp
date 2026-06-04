@@ -51,7 +51,8 @@ std::shared_ptr<KHARMAPackage> RadM1::Initialize(ParameterInput *pin, std::share
     auto driver_type = driver.Get<DriverType>("type");
     // TODO follow GRMHD::implicit?
     bool implicit_radm1 = (driver_type == DriverType::imex && pin->GetOrAddBoolean("RadM1", "implicit", true));
-
+    //CHANGE BACK PEDRO
+    // bool implicit_radm1 = false;
     MetadataFlag areWeImplicit = (implicit_radm1) ? Metadata::GetUserFlag("Implicit")
                                               : Metadata::GetUserFlag("Explicit");
     
@@ -119,10 +120,6 @@ std::shared_ptr<KHARMAPackage> RadM1::Initialize(ParameterInput *pin, std::share
     pkg->AllParams().Add("src_rootfind_tol", src_rootfind_tol);
     pkg->AllParams().Add("src_rootfind_maxiter", src_rootfind_maxiter);
 
-    // Real kappa_ep = pin->GetOrAddReal("radM1", "kappa_ep", 0.0);
-    // Real sigma = pin->GetOrAddReal("radM1", "sigma", 0.0);
-    // pkg->AllParams().Add("kappa_ep", kappa_ep);
-    // pkg->AllParams().Add("sigma", sigma);
 
     //Right now, to execute the torus problem with radM1, we need to initialize the radiation primitives in fm_torus.cpp (this is stupid) (ASK Cora)
     //I think this should be moved to RadM1 method, maybe call an initialization method like a task straight after initializing the torus?
@@ -176,7 +173,9 @@ TaskStatus RadM1::BlockPtoU(MeshBlockData<Real> *rc, IndexDomain domain, bool co
     const auto& G = pmb->coords;
 
     // Pack Conserved Variables (Destination)
-    auto& U = rc->PackVariables(std::vector<std::string>{"cons.u_rad", "cons.uvec_rad"});
+    PackIndexMap cons_map;
+    auto& U = rc->PackVariables(std::vector<std::string>{"cons.u_rad", "cons.uvec_rad"}, cons_map);
+    VarMap m_u(cons_map, true);
 
     // Pack Primitive Variables (Source)
     PackIndexMap prim_map;
@@ -207,10 +206,10 @@ TaskStatus RadM1::BlockPtoU(MeshBlockData<Real> *rc, IndexDomain domain, bool co
         Real R_t_cov[GR_DIM];
         G.lower(R_t_con, R_t_cov, k, j, i, Loci::center);
 
-        U(0, k, j, i) = R_t_cov[0] * G.gdet(Loci::center, j, i); // cons.u_rad
-        U(1, k, j, i) = R_t_cov[1] * G.gdet(Loci::center, j, i); // cons.uvec_rad 1
-        U(2, k, j, i) = R_t_cov[2] * G.gdet(Loci::center, j, i); // cons.uvec_rad 2
-        U(3, k, j, i) = R_t_cov[3] * G.gdet(Loci::center, j, i); // cons.uvec_rad 3
+        U(m_u.UU_RAD, k, j, i) = R_t_cov[0] * G.gdet(Loci::center, j, i); // cons.u_rad
+        U(m_u.U1_RAD, k, j, i) = R_t_cov[1] * G.gdet(Loci::center, j, i); // cons.uvec_rad 1
+        U(m_u.U2_RAD, k, j, i) = R_t_cov[2] * G.gdet(Loci::center, j, i); // cons.uvec_rad 2
+        U(m_u.U3_RAD, k, j, i) = R_t_cov[3] * G.gdet(Loci::center, j, i); // cons.uvec_rad 3
     });
     return TaskStatus::complete;
 }
@@ -372,7 +371,7 @@ TaskStatus RadM1::Step(MeshData<Real> *md_full_init, MeshData<Real> *md_sub_init
 
         auto pmb_init_data = md_sub_init->GetBlockData(b);
         
-        PackIndexMap dummy_map; // We can reuse or ignore this map for the initial state
+        PackIndexMap dummy_map;
         auto P_init = pmb_init_data->PackVariables({Metadata::GetUserFlag("Primitive")}, prims_map);
         auto U_init = pmb_init_data->PackVariables({Metadata::Conserved, Metadata::Cell}, cons_map);
 
@@ -409,7 +408,9 @@ TaskStatus RadM1::PostStepDiagnostics(const SimTime& tm, MeshData<Real> *md)
     // Mirrors Inverter function, logic should be the same
     if (flag_verbose >= 1) {
         Reductions::StartFlagReduce(md, "rflag", RadM1::status_names, IndexDomain::interior, false, 1);
-        Reductions::CheckFlagReduceAndPrintHits(md, "rflag", RadM1::status_names, IndexDomain::interior, false, 1);
+        auto total_flag_counts = Reductions::CheckFlagReduceAndPrintHits(md, "rflag", RadM1::status_names, IndexDomain::interior, false, 1);
+        Reductions::PrintFlagPercentages(md, "rflag", RadM1::status_names, IndexDomain::interior, total_flag_counts);
+        
     }
 
     return TaskStatus::complete;

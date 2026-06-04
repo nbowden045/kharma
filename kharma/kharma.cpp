@@ -331,9 +331,9 @@ void KHARMA::FixParameters(ParameterInput *pin, bool is_parthenon_restart)
         pin->SetBoolean("coordinates", "correct_connections", true);
         // Mark GRMHD variables as implicitly evolved if RadM1 interaction is enabled
         // (but note we're not using the Implicit package to do it!)
-        if (pin->GetOrAddBoolean("RadM1", "implicit", true)) {
-            pin->SetBoolean("GRMHD", "implicit", true);
-        }
+        // if (pin->GetOrAddBoolean("RadM1", "implicit", true)) {
+        //     pin->SetBoolean("GRMHD", "implicit", true);
+        // }
         // Force light crossing timestep
         //pin->SetBoolean("parthenon/time", "use_dt_light", true);
     }
@@ -450,6 +450,7 @@ Packages_t KHARMA::ProcessPackages(std::unique_ptr<ParameterInput> &pin)
     if (pin->GetOrAddBoolean("units", "on", false)) {
         auto t_units = tl.AddTask(t_grmhd, KHARMA::AddPackage, packages, Units::Initialize, pin.get());
     }
+
     // Enable radiation package. Out of the package modification RADM1.
     bool use_radm1 = pin->GetOrAddBoolean("radM1", "on", false);
     if (use_radm1) {

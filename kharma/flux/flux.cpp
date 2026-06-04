@@ -420,6 +420,7 @@ void Flux::AddGeoSource(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDomain d
 
     //Out of the package modification RADM1.
     const bool use_rad = pmb0->packages.AllPackages().count("RadM1");
+    
 
     // All connection coefficients are zero in Cartesian Minkowski space
     // TODO do we know this fully in init?

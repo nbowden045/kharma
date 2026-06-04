@@ -79,6 +79,7 @@ inline TaskStatus GetFlux(MeshData<Real> *md)
 
     // Out of the Package modification RADM1.
     const bool use_rad = packages.AllPackages().count("RadM1");
+  
     if(use_rad){
         const auto& rad_pars = packages.Get("RadM1")->AllParams();
     }

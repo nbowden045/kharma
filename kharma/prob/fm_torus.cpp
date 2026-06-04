@@ -74,6 +74,7 @@ TaskStatus InitializeFMTorus(std::shared_ptr<MeshBlockData<Real>>& rc, Parameter
     // I think this can be moved to RadM1::Initialize, but for now it's easier to just have it here since we need the plasma four-velocity.
     // especially since we want to test the radiation with other problems, and we should be able to initialize it without the torus solution.
     const bool use_rad = pmb->packages.AllPackages().count("RadM1");
+
     GridScalar uu_rad;
     GridVector uvec_rad;
     if(use_rad){
@@ -208,7 +209,7 @@ TaskStatus InitializeFMTorus(std::shared_ptr<MeshBlockData<Real>>& rc, Parameter
 
             if(use_rad){
                 //Following Koral initialization for fishbone moncrief
-                RadM1::initialize_radiation_pressure(u(k,j,i), &uu_rad(k,j,i));
+                RadM1::initialize_radiation_pressure(u(k,j,i), uu_rad(k,j,i));
             }
         }
     );

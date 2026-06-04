@@ -319,6 +319,7 @@ Real EstimateTimestep(MeshData<Real> *md)
         // Out of the Package modification RADM1.
         // If radiation package is present, use radiation cmax and cmin for timestep calculation instead of MHD cmax and cmin
         const bool use_rad = pmesh->packages.AllPackages().count("RadM1");
+        
         const auto& cmax = (use_rad) ? rc->PackVariables(std::vector<std::string>{"Flux.cmax_rad"}) : cmax_mhd;
         const auto& cmin = (use_rad) ? rc->PackVariables(std::vector<std::string>{"Flux.cmin_rad"}) : cmin_mhd;
         

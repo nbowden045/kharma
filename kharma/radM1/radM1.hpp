@@ -47,11 +47,12 @@ namespace RadM1 {
 
 // Denote implicit solve failures (rflags)
 // This enum should grow to cover any potential flags
-enum class Status{success=0, fluidsolve, failure};
+enum class StatusImplicitStep{success=0, mhdsolve, radsolve, bothsolve, failure};
 
 static const std::map<int, std::string> status_names = {
-    {(int) Status::fluidsolve, "RadM1 UtoP Failure"},
-    {(int) Status::failure, "RadM1 Step Failure"}
+    {(int) StatusImplicitStep::mhdsolve, "RadM1 MHD Solve Failure"}, // flag that means that the MHD inversion failed (but rad solve worked)
+    {(int) StatusImplicitStep::radsolve, "RadM1 Radiation Solve Failure"}, // flag that means that the radiation solve failed (but mhd solve worked)
+    {(int) StatusImplicitStep::failure, "RadM1 Step Failure"}
 };
 
 TaskStatus BlockPtoU(MeshBlockData<Real> *rc, IndexDomain domain, bool coarse = false);
@@ -200,7 +201,7 @@ KOKKOS_INLINE_FUNCTION void calc_tensor_m1(const GRCoordinates& G, const Local& 
     G.lower(R_con_dir, R_dir_mu, 0, j, i, loc); // Note: Assuming k=0 for local slices
 }
 
-KOKKOS_INLINE_FUNCTION void initialize_radiation_pressure(Real UU, Real * UU_rad) {
+KOKKOS_INLINE_FUNCTION void initialize_radiation_pressure(Real UU, Real& UU_rad) {
     //Here we assume that Pgas + Prad = Ptot
     //This translates to rho * T + 1/3 a_rad * T^4 - Ptot = 0
     //The derivative gives us rho + 4/3 a_rad * T^3 = 0, which we can use to find the root of the equation and solve for T given rho and Ptot. 
@@ -208,7 +209,7 @@ KOKKOS_INLINE_FUNCTION void initialize_radiation_pressure(Real UU, Real * UU_rad
     // we are gonna assume here that the radiation pressure is negligible at the start of the simulation, so we can just set it to a small value.
 
     // radiation pressure is 0.1% of the gas pressure at the start of the simulation.
-    *UU_rad = UU * 0.001;
+    UU_rad = UU * 0.001;
 
     return;
 }

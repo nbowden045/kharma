@@ -142,7 +142,7 @@ KOKKOS_INLINE_FUNCTION double CalculateGammaRel2(const GRCoordinates& G, const R
     return gammarel2;
 }
 
-KOKKOS_INLINE_FUNCTION TaskStatus CalculateRadPrimitive_M1(
+KOKKOS_INLINE_FUNCTION StatusImplicitStep CalculateRadPrimitive_M1(
     const GRCoordinates& G,
     const Real U_rad[4],
     Real P_rad[4],
@@ -219,7 +219,7 @@ KOKKOS_INLINE_FUNCTION TaskStatus CalculateRadPrimitive_M1(
             P_rad[1] = 0.0;
             P_rad[2] = 0.0;
             P_rad[3] = 0.0;
-            return TaskStatus::complete;
+            return StatusImplicitStep::radsolve;
         }
 
         Real R_t_cov_new[4] = {R_t_t_new, R_t_cov[1], R_t_cov[2], R_t_cov[3]};
@@ -240,7 +240,7 @@ KOKKOS_INLINE_FUNCTION TaskStatus CalculateRadPrimitive_M1(
     P_rad[2] = uvec_radframe_con[2];
     P_rad[3] = uvec_radframe_con[3];
 
-    return TaskStatus::complete;
+    return StatusImplicitStep::success;
 }
 
 
@@ -267,7 +267,7 @@ KOKKOS_INLINE_FUNCTION void ComputeCovariantFourForce(
     const Real sigma_rad = 3.085e9; // Test 1 value
     const Real kappa_rho = 0.4;     // Test 1 value
     
-    Real JBB = sigma_rad * (Tg * Tg * Tg * Tg); // E_eq = sigma * T^4
+    Real JBB = 4 * sigma_rad * (Tg * Tg * Tg * Tg); // E_eq = 4 * sigma * T^4
     Real kappa_a = Gas_Rho * kappa_rho;
     Real kappa_tot = kappa_a; 
     
@@ -346,11 +346,6 @@ KOKKOS_INLINE_FUNCTION int solve_radiation_4d(
     GRMHD::p_to_u_mhd(G, Gas_Rho, ug_init, uvec, B_P, gam, k, j, i, 
                rho_ut_dummy, U_mhd_0, Loci::center);
 
-    //Extract Radition conserved variables
-    // Real R_init[4][4];
-    // for (int dir = 0; dir < 4; ++dir) {
-    //     calc_tensor_m1(G, P_init, m_p, dir, k, j, i, Loci::center, R_init[dir]);
-    // }
 
     Real P_rad_m[4];
     Real P_rad_p[4];
@@ -435,7 +430,7 @@ KOKKOS_INLINE_FUNCTION int solve_radiation_4d(
 
             // Recover rad primitives
             auto status_m = CalculateRadPrimitive_M1(G, U_rad_m, P_rad_m, k, j, i);
-            if (status_m == TaskStatus::fail) {
+            if (status_m == StatusImplicitStep::radsolve) {
                 bad_guess_m = true;
             }
 
@@ -457,7 +452,7 @@ KOKKOS_INLINE_FUNCTION int solve_radiation_4d(
             }
 
             auto status_p = CalculateRadPrimitive_M1(G, U_rad_p, P_rad_p, k, j, i);
-            if (status_p == TaskStatus::fail) {
+            if (status_p == StatusImplicitStep::radsolve) {
                 bad_guess_p = true;
             }            
             ComputeCovariantFourForce(G, P_mhd_p, P_rad_p, Gas_Rho, gam, k, j, i, dS_p);
@@ -496,7 +491,7 @@ KOKKOS_INLINE_FUNCTION int solve_radiation_4d(
                 ComputeCovariantFourForce(G, P_mhd_p, P_rad_p, Gas_Rho, gam, k, j, i, dS_p);
                 for (int n = 0; n < 4; n++) dS_p[n] = gdet * dS_p[n];
                 
-                PARTHENON_DEBUG_REQUIRE(status_p == TaskStatus::complete,
+                PARTHENON_DEBUG_REQUIRE(status_p == StatusImplicitStep::success,
                                     "This inversion should have already worked!");
                 for (int n = 0; n < 4; n++) {
                     Real fp = U_mhd_p[n] - U_mhd_0[n] + dt * dS_p[n];
@@ -524,7 +519,7 @@ KOKKOS_INLINE_FUNCTION int solve_radiation_4d(
                 auto status_m = CalculateRadPrimitive_M1(G, U_rad_m, P_rad_m, k, j, i);
                 ComputeCovariantFourForce(G, P_mhd_m, P_rad_m, Gas_Rho, gam, k, j, i, dS_m);
                 for (int n = 0; n < 4; n++) dS_m[n] = gdet * dS_m[n];
-                PARTHENON_DEBUG_REQUIRE(status_m == TaskStatus::complete,
+                PARTHENON_DEBUG_REQUIRE(status_m == StatusImplicitStep::success,
                                     "This inversion should have already worked!");
                 for (int n = 0; n < 4; n++) {
                     Real fm = U_mhd_m[n] - U_mhd_0[n] + dt * dS_m[n];
@@ -563,7 +558,7 @@ KOKKOS_INLINE_FUNCTION int solve_radiation_4d(
 
             for (int n = 0; n < 4; n++) dS_guess[n] = gdet * dS_guess[n];
 
-            if(status == TaskStatus::fail){
+            if(status == StatusImplicitStep::radsolve){
                 bad_guess = true;
             }
 
@@ -630,7 +625,7 @@ KOKKOS_INLINE_FUNCTION int solve_radiation_4d(
                 for (int n = 0; n < 4; n++) dS_guess[n] = gdet * dS_guess[n];
 
                 // If the scaled step lands in a physically valid regime, we cleared the error flag!
-                if (status != TaskStatus::fail && P_mhd_guess[0] > umin) {
+                if (status != StatusImplicitStep::radsolve && P_mhd_guess[0] > umin) {
                     bad_guess = false; 
                 }
             }
@@ -693,7 +688,7 @@ KOKKOS_INLINE_FUNCTION int solve_radiation_4d(
 
     //TODO: Fall back to 1d solver, if 4d encounters an issue
     // For now, I'll only implement the 4D solver, so if it fails just return fail
-    if (!success) return static_cast<int>(Status::failure);
+    if (!success) return static_cast<int>(StatusImplicitStep::failure);
 
     bool successful_prim_recovery = false;
 
@@ -718,15 +713,18 @@ KOKKOS_INLINE_FUNCTION int solve_radiation_4d(
     U_new(m_u.U2, k, j, i) = U_init(m_u.U2, k, j, i) - dcov_rad[2];
     U_new(m_u.U3, k, j, i) = U_init(m_u.U3, k, j, i) - dcov_rad[3];
 
+
     // Do GRMHD U2P with the new guess for the fluid primitives.
     // Real U_mhd_final[4] = {U_new(m_u.UU, k, j, i), U_new(m_u.U1, k, j, i), 
     //                             U_new(m_u.U2, k, j, i), U_new(m_u.U3, k, j, i)};
     //Real P_mhd_final[4];
-
+    // if(i == 106 && j == 44 && k == 0){
+    //     U_new(m_u.UU, k, j, i) = 0.5 * U_init(m_u.UU, k, j, i);
+    //     printf("i = %d, j = %d, k = %d, Ug_init = %.15e, ug_final = %.15e\n", i, j, k, U_init(m_u.UU, k, j, i), U_new(m_u.UU, k, j, i));
+    // }
     auto mhd_inverter_status = Inverter::u_to_p<Inverter::Type::kastaun>(
         G, U_new, m_u, gam, k, j, i, P_new, m_p, Loci::center, 
         25, 1e-12, true);
-        
     if (mhd_inverter_status != static_cast<int>(Inverter::Status::success)) {
         successful_prim_recovery = false;
         // It failed, go back to what it was!
@@ -750,7 +748,7 @@ KOKKOS_INLINE_FUNCTION int solve_radiation_4d(
 
         auto rad_status = CalculateRadPrimitive_M1(G, U_rad_final, P_rad_final, k, j, i);
 
-        if (rad_status == TaskStatus::fail) {
+        if (rad_status == StatusImplicitStep::radsolve) {
             successful_prim_recovery = false;
         } else {
             P_new(m_p.UU_RAD,  k, j, i) = P_rad_final[0];
@@ -805,9 +803,22 @@ KOKKOS_INLINE_FUNCTION int solve_radiation_4d(
         U_new(m_u.U1_RAD, k, j, i) = 0.0;
         U_new(m_u.U2_RAD, k, j, i) = 0.0;
         U_new(m_u.U3_RAD, k, j, i) = 0.0;
-        return static_cast<int>(Status::fluidsolve);
+
+        if(mhd_inverter_status != static_cast<int>(Inverter::Status::success)){
+            return static_cast<int>(StatusImplicitStep::mhdsolve);
+        }else{
+            // The inverter for MHD worked, but the radiation failed.
+            return static_cast<int>(StatusImplicitStep::radsolve);
+        }
     }
-    return static_cast<int>(Status::success);
+    //For cell ijk print the initial U_new and U_init internal energy
+    // Let us select i = 10, j = 10, k = 10 for this print statement, you can change it as needed.
+    //i = 106, j = 44, k = 0, Ug_init = 1.194703976054861e+00, ug_final = 1.194703944411377e+00
+    
+    if(i == 106 && j == 44 && k == 0){
+        printf("i = %d, j = %d, k = %d, Ug_init = %.15e, ug_final = %.15e\n", i, j, k, U_init(m_u.UU, k, j, i), U_new(m_u.UU, k, j, i));
+    }
+    return static_cast<int>(StatusImplicitStep::success);
 }
 
 } // namespace RadM1
