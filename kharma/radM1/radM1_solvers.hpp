@@ -815,9 +815,6 @@ KOKKOS_INLINE_FUNCTION int solve_radiation_4d(
     // Let us select i = 10, j = 10, k = 10 for this print statement, you can change it as needed.
     //i = 106, j = 44, k = 0, Ug_init = 1.194703976054861e+00, ug_final = 1.194703944411377e+00
     
-    if(i == 106 && j == 44 && k == 0){
-        printf("i = %d, j = %d, k = %d, Ug_init = %.15e, ug_final = %.15e\n", i, j, k, U_init(m_u.UU, k, j, i), U_new(m_u.UU, k, j, i));
-    }
     return static_cast<int>(StatusImplicitStep::success);
 }
 

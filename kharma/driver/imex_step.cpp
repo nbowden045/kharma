@@ -264,24 +264,12 @@ TaskCollection KHARMADriver::MakeImExTaskCollection(BlockList_t &blocks, int sta
             t_implicit = tl.AddTask(t_implicit_step, WeightedSumDataFace<MetadataFlag>, std::vector<MetadataFlag>({Metadata::Face}),
                                     md_solver.get(), md_solver.get(), 1.0, 0.0, md_sub_step_final.get());
         } else if (use_radm1) {
-            // Add fluxes and geometric source term to the GRMHD variables as well (in radM1 currently, 
-            // they are flagged as implicit and this was not getting triggered)
-            auto t_update = KHARMADriver::AddStateUpdate(t_sources, tl, md_full_step_init.get(), md_sub_step_init.get(),
-                                                        md_flux_src.get(), md_solver.get(),
-                                                        std::vector<MetadataFlag>{Metadata::GetUserFlag("Implicit"), Metadata::Independent},
-                                                        use_b_ct, stage);
-            auto t_ideal_guess = t_update;
-            //auto t_explicit_UtoP = t_ideal_guess;
-            // Invert UtoP with only advection + geometric terms. I think this might be unnecesary, since
-            // at the beginning of Step, we do a PtoU to get the conserved variables before the addition of G^mu starts.
-            auto t_explicit_UtoP = tl.AddTask(t_ideal_guess, Packages::MeshUtoP, md_solver.get(), IndexDomain::entire, false);
-            auto t_explicit = t_explicit_UtoP;
             t_implicit = t_explicit;
-            t_implicit = tl.AddTask(t_explicit, RadM1::Step, 
-                                      md_full_step_init.get(), 
-                                      md_sub_step_init.get(), 
-                                      md_sub_step_final.get(), 
-                                      integrator->beta[stage-1] * integrator->dt);
+            // t_implicit = tl.AddTask(t_explicit, RadM1::Step, 
+            //                           md_full_step_init.get(), 
+            //                           md_sub_step_init.get(), 
+            //                           md_sub_step_final.get(), 
+            //                           integrator->beta[stage-1] * integrator->dt);
         }
 
 

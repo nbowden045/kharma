@@ -53,8 +53,6 @@ std::shared_ptr<KHARMAPackage> RadM1::Initialize(ParameterInput *pin, std::share
     bool implicit_radm1 = (driver_type == DriverType::imex && pin->GetOrAddBoolean("RadM1", "implicit", true));
     //CHANGE BACK PEDRO
     // bool implicit_radm1 = false;
-    MetadataFlag areWeImplicit = (implicit_radm1) ? Metadata::GetUserFlag("Implicit")
-                                              : Metadata::GetUserFlag("Explicit");
     
     if (!implicit_radm1) PARTHENON_WARN("M1 implementation will be uncoupled unless ImEx driver is used!");
 
@@ -63,7 +61,7 @@ std::shared_ptr<KHARMAPackage> RadM1::Initialize(ParameterInput *pin, std::share
     // Properties of these new flags
     // I believe Metadata::Cell means these variables are defined at cell centers, but I should ask Cora.
     // We also add the "areWeImplicit" flag, which is either "Implicit" or "Explicit" based on the user's choice in the input file.
-    std::vector<MetadataFlag> flags_radm1 = {Metadata::Cell, areWeImplicit, Metadata::GetUserFlag("RADM1")};
+    std::vector<MetadataFlag> flags_radm1 = {Metadata::Cell, Metadata::GetUserFlag("Explicit"), Metadata::GetUserFlag("RADM1")};
 
     //Retrieves the existing flags for the primitive and conserved variables, and adds the new radM1 flags to them.
     //Then adds the new variables for the radiation primitives and conserved variables with these flags.
