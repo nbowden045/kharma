@@ -265,11 +265,13 @@ TaskCollection KHARMADriver::MakeImExTaskCollection(BlockList_t &blocks, int sta
                                     md_solver.get(), md_solver.get(), 1.0, 0.0, md_sub_step_final.get());
         } else if (use_radm1) {
             t_implicit = t_explicit;
-            // t_implicit = tl.AddTask(t_explicit, RadM1::Step, 
-            //                           md_full_step_init.get(), 
-            //                           md_sub_step_init.get(), 
-            //                           md_sub_step_final.get(), 
-            //                           integrator->beta[stage-1] * integrator->dt);
+            // print U_init values before radM1::step
+
+            t_implicit = tl.AddTask(t_explicit, RadM1::Step, 
+                                      md_full_step_init.get(), 
+                                      md_sub_step_init.get(), 
+                                      md_sub_step_final.get(), 
+                                      integrator->beta[stage-1] * integrator->dt);
         }
 
 

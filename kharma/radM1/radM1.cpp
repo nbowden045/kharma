@@ -380,10 +380,16 @@ TaskStatus RadM1::Step(MeshData<Real> *md_full_init, MeshData<Real> *md_sub_init
 
         pmb->par_for("RadM1_Implicit_Solver4D", kb.s, kb.e, jb.s, jb.e, ib.s, ib.e,
             KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
+                // if (i == 110) {
+                //     printf("The initial set of U_init is [%.15e, %.15e, %.15e, %.15e]\n", U_init(m_u.UU, k, j, i), U_init(m_u.U1, k, j, i), U_init(m_u.U2, k, j, i), U_init(m_u.U3, k, j, i));
+                // }
                 int rflagl = solve_radiation_4d(
                     G, U_init, P_init, P_new, U_new, m_p, m_u, k, j, i,
                     dt, gam, src_rootfind_eps, src_rootfind_tol, src_rootfind_maxiter
                 );
+                // if(i == 110) {
+                //     printf("The new set of U_new is [%.15e, %.15e, %.15e, %.15e]\n\n", U_new(m_u.UU, k, j, i), U_new(m_u.U1, k, j, i), U_new(m_u.U2, k, j, i), U_new(m_u.U3, k, j, i));
+                // }
                 rflag(0, k, j, i) = rflagl;
             }
         );

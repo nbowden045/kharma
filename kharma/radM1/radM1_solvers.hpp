@@ -182,6 +182,8 @@ KOKKOS_INLINE_FUNCTION StatusImplicitStep CalculateRadPrimitive_M1(
     int nonfailure = (gammarel2 >= 1.0) && (E_rf > min_erad) && 
                      (gammarel2 <= (GAMMAMAX * GAMMAMAX) / (min_erad * min_erad));
     
+    // Our primitives is saving uvec_rad as the eulerian frame velocity.
+    // $\tilde{u}^i = \gamma v^i$
     Real uvec_radframe_con[4] = {0};
 
     // Evaluate valid primitives or apply cold closure fix
@@ -243,7 +245,6 @@ KOKKOS_INLINE_FUNCTION StatusImplicitStep CalculateRadPrimitive_M1(
     return StatusImplicitStep::success;
 }
 
-
 KOKKOS_INLINE_FUNCTION void ComputeCovariantFourForce(
     const GRCoordinates& G, 
     const Real P_mhd[4], 
@@ -253,48 +254,44 @@ KOKKOS_INLINE_FUNCTION void ComputeCovariantFourForce(
     const int k, const int j, const int i, 
     Real dS[4]) 
 {
-    Real uvec[3] = {P_mhd[1], P_mhd[2], P_mhd[3]};
-    Real ucon[4];
-    
-    GRMHD::calc_ucon(G, uvec, k, j, i, Loci::center, ucon);
+    Real uvec_mhd[3] = {P_mhd[1], P_mhd[2], P_mhd[3]};
+    Real ucon_mhd[4], ucov_mhd[4];
+    GRMHD::calc_ucon(G, uvec_mhd, k, j, i, Loci::center, ucon_mhd);
+    G.lower(ucon_mhd, ucov_mhd, k, j, i, Loci::center);
 
-    Real ucov[4];
-    G.lower(ucon, ucov, k, j, i, Loci::center);
+    Real Erf = P_rad[0]; 
+    Real uvec_rad[3] = {P_rad[1], P_rad[2], P_rad[3]};
+    Real ucon_rad[4], ucov_rad[4];
+    GRMHD::calc_ucon(G, uvec_rad, k, j, i, Loci::center, ucon_rad);
+    G.lower(ucon_rad, ucov_rad, k, j, i, Loci::center);
 
+    Real gamma_rel = -(ucon_rad[0]*ucov_mhd[0] + 
+                       ucon_rad[1]*ucov_mhd[1] + 
+                       ucon_rad[2]*ucov_mhd[2] + 
+                       ucon_rad[3]*ucov_mhd[3]);
+    gamma_rel = m::max(gamma_rel, 1.0);
+
+    Real E_hat = Erf * ((4.0 / 3.0) * gamma_rel * gamma_rel - (1.0 / 3.0));
+    Real F_hat_cov[4];
+    for (int mu = 0; mu < 4; ++mu) {
+        F_hat_cov[mu] = (4.0 / 3.0) * Erf * gamma_rel * ucov_rad[mu] - 
+                        ((1.0 / 3.0) * Erf + E_hat) * ucov_mhd[mu];
+    }
 
     Real Tg = (gam - 1.0) * (P_mhd[0] / Gas_Rho); 
+    const Real sigma_rad = 3.085e9; // For shocktube test 1
+    const Real kappa_rho = 0.4;     // For shocktube test 1
     
-    const Real sigma_rad = 3.085e9; // Test 1 value
-    const Real kappa_rho = 0.4;     // Test 1 value
-    
-    Real JBB = 4 * sigma_rad * (Tg * Tg * Tg * Tg); // E_eq = 4 * sigma * T^4
-    Real kappa_a = Gas_Rho * kappa_rho;
+    Real JBB = 4.0 * sigma_rad * (Tg * Tg * Tg * Tg); 
+    Real kappa_a = m::min(Gas_Rho * kappa_rho, 1.e5);
     Real kappa_tot = kappa_a; 
-    
-    // Safety cap for extremely optically thick regimes (Phoebus use the same thing)
-    kappa_a = m::min(kappa_a, 1.e5);
-    kappa_tot = m::min(kappa_tot, 1.e5);
 
-    //u_mu * F^mu = 0 to find F_0
-    Real F_hat_cov[4] = {0.0, P_rad[1], P_rad[2], P_rad[3]};
-    Real F_hat_con[4];
-    G.raise(F_hat_cov, F_hat_con, k, j, i, Loci::center);
+    Real coupling_term = kappa_a * (JBB - E_hat);
     
-    // F_hat_0 = - (u_i * F_hat^i) / u^0
-    Real uF_space = ucov[1]*F_hat_con[1] + ucov[2]*F_hat_con[2] + ucov[3]*F_hat_con[3];
-    F_hat_cov[0] = -uF_space / ucon[0];
-
-    // G_mu = kappa_a * (E_eq - E_hat) * u_mu - kappa_tot * F_hat_mu
-    Real coupling_term = kappa_a * (JBB - P_rad[0]);
-    
-    dS[0] = coupling_term * ucov[0] - kappa_tot * F_hat_cov[0]; // Energy exchange
-    dS[1] = coupling_term * ucov[1] - kappa_tot * F_hat_cov[1]; // Momentum exchange X1
-    dS[2] = coupling_term * ucov[2] - kappa_tot * F_hat_cov[2]; // Momentum exchange X2
-    dS[3] = coupling_term * ucov[3] - kappa_tot * F_hat_cov[3]; // Momentum exchange X3
-    // dS[0] = 0.0;
-    // dS[1] = 0.0;
-    // dS[2] = 0.0;
-    // dS[3] = 0.0;
+    dS[0] = coupling_term * ucov_mhd[0] - kappa_tot * F_hat_cov[0]; 
+    dS[1] = coupling_term * ucov_mhd[1] - kappa_tot * F_hat_cov[1]; 
+    dS[2] = coupling_term * ucov_mhd[2] - kappa_tot * F_hat_cov[2]; 
+    dS[3] = coupling_term * ucov_mhd[3] - kappa_tot * F_hat_cov[3]; 
 }
 
 KOKKOS_INLINE_FUNCTION int solve_radiation_4d(
@@ -365,11 +362,10 @@ KOKKOS_INLINE_FUNCTION int solve_radiation_4d(
     //Iteration 0
     
     // Convert current gas primitives guess to conserved variables
-    uvec[0] = P_mhd_guess[1];
-    uvec[1] = P_mhd_guess[2];
-    uvec[2] = P_mhd_guess[3];
-    GRMHD::p_to_u_mhd(G, Gas_Rho, P_mhd_guess[0], uvec, B_P, gam, k, j, i, 
-               rho_ut_dummy, U_mhd_guess, Loci::center);
+    U_mhd_guess[0] = P_mhd_guess[0];
+    U_mhd_guess[1] = P_mhd_guess[1];
+    U_mhd_guess[2] = P_mhd_guess[2];
+    U_mhd_guess[3] = P_mhd_guess[3];
 
     // Conservation law: Delta U_rad = - Delta U_mhd
     for (int n = 0; n < 4; n++) {
@@ -392,10 +388,13 @@ KOKKOS_INLINE_FUNCTION int solve_radiation_4d(
     bool bad_guess = false;
     
     do {
+        //if(i == 106)           printf("Iter %d: Residuals = [%e, %e, %e, %e], Err = %e\n", niter, resid[0], resid[1], resid[2], resid[3], err);
         Real jac[4][4] = {0};
 
+
+
         // Find minimum non-zero magnitude from P_mhd_guess to scale FD step safely
-        Real P_mhd_mag_min = RAD_LARGE; // Or std::numeric_limits<Real>::max()
+        Real P_mhd_mag_min = RAD_LARGE;
         for (int m = 0; m < 4; m++) {
             if (m::abs(P_mhd_guess[m]) > 0.) {
                 P_mhd_mag_min = m::min(P_mhd_mag_min, m::abs(P_mhd_guess[m]));
@@ -691,46 +690,53 @@ KOKKOS_INLINE_FUNCTION int solve_radiation_4d(
     if (!success) return static_cast<int>(StatusImplicitStep::failure);
 
     bool successful_prim_recovery = false;
+    // if(i==110){
+    //     printf("U_init=%e\n",U_init(m_u.UU,k,j,i));
+    //     printf("U_new(before)=%e\n",U_new(m_u.UU,k,j,i));
+    // }
+    // // Copy ALL variables from _init to _new. 
+    // const int nvar_u = U_init.GetDim(4);
+    // for (int v = 0; v < nvar_u; ++v) {
+    //     U_new(v, k, j, i) = U_init(v, k, j, i);
+    // }
 
-    // Copy ALL variables from _init to _new. 
-    const int nvar_u = U_init.GetDim(4);
-    for (int v = 0; v < nvar_u; ++v) {
-        U_new(v, k, j, i) = U_init(v, k, j, i);
-    }
+    // const int nvar_p = P_init.GetDim(4);
+    // for (int v = 0; v < nvar_p; ++v) {
+    //     P_new(v, k, j, i) = P_init(v, k, j, i);
+    // }
 
-    const int nvar_p = P_init.GetDim(4);
-    for (int v = 0; v < nvar_p; ++v) {
-        P_new(v, k, j, i) = P_init(v, k, j, i);
-    }
-
-    U_new(m_u.UU_RAD, k, j, i) = U_init(m_u.UU_RAD, k, j, i) + dcov_rad[0];
-    U_new(m_u.U1_RAD, k, j, i) = U_init(m_u.U1_RAD, k, j, i) + dcov_rad[1];
-    U_new(m_u.U2_RAD, k, j, i) = U_init(m_u.U2_RAD, k, j, i) + dcov_rad[2];
-    U_new(m_u.U3_RAD, k, j, i) = U_init(m_u.U3_RAD, k, j, i) + dcov_rad[3];
+    // U_new(m_u.UU_RAD, k, j, i) = U_init(m_u.UU_RAD, k, j, i) + dcov_rad[0];
+    // U_new(m_u.U1_RAD, k, j, i) = U_init(m_u.U1_RAD, k, j, i) + dcov_rad[1];
+    // U_new(m_u.U2_RAD, k, j, i) = U_init(m_u.U2_RAD, k, j, i) + dcov_rad[2];
+    // U_new(m_u.U3_RAD, k, j, i) = U_init(m_u.U3_RAD, k, j, i) + dcov_rad[3];
+    U_new(m_u.UU_RAD, k, j, i) += dcov_rad[0];
+    U_new(m_u.U1_RAD, k, j, i) += dcov_rad[1];
+    U_new(m_u.U2_RAD, k, j, i) += dcov_rad[2];
+    U_new(m_u.U3_RAD, k, j, i) += dcov_rad[3];
+    U_new(m_u.UU, k, j, i) -= dcov_rad[0];
+    U_new(m_u.U1, k, j, i) -= dcov_rad[1];
+    U_new(m_u.U2, k, j, i) -= dcov_rad[2];
+    U_new(m_u.U3, k, j, i) -= dcov_rad[3];
     // Here we are gonna overwrite only the active fluid conserved variables modified by the solver
-    U_new(m_u.UU, k, j, i) = U_init(m_u.UU, k, j, i) - dcov_rad[0];
-    U_new(m_u.U1, k, j, i) = U_init(m_u.U1, k, j, i) - dcov_rad[1];
-    U_new(m_u.U2, k, j, i) = U_init(m_u.U2, k, j, i) - dcov_rad[2];
-    U_new(m_u.U3, k, j, i) = U_init(m_u.U3, k, j, i) - dcov_rad[3];
+    // U_new(m_u.UU, k, j, i) = U_init(m_u.UU, k, j, i) - dcov_rad[0];
+    // U_new(m_u.U1, k, j, i) = U_init(m_u.U1, k, j, i) - dcov_rad[1];
+    // U_new(m_u.U2, k, j, i) = U_init(m_u.U2, k, j, i) - dcov_rad[2];
+    // U_new(m_u.U3, k, j, i) = U_init(m_u.U3, k, j, i) - dcov_rad[3];
 
 
     // Do GRMHD U2P with the new guess for the fluid primitives.
     // Real U_mhd_final[4] = {U_new(m_u.UU, k, j, i), U_new(m_u.U1, k, j, i), 
     //                             U_new(m_u.U2, k, j, i), U_new(m_u.U3, k, j, i)};
     //Real P_mhd_final[4];
-    // if(i == 106 && j == 44 && k == 0){
-    //     U_new(m_u.UU, k, j, i) = 0.5 * U_init(m_u.UU, k, j, i);
-    //     printf("i = %d, j = %d, k = %d, Ug_init = %.15e, ug_final = %.15e\n", i, j, k, U_init(m_u.UU, k, j, i), U_new(m_u.UU, k, j, i));
-    // }
     auto mhd_inverter_status = Inverter::u_to_p<Inverter::Type::kastaun>(
         G, U_new, m_u, gam, k, j, i, P_new, m_p, Loci::center, 
         25, 1e-12, true);
     if (mhd_inverter_status != static_cast<int>(Inverter::Status::success)) {
         successful_prim_recovery = false;
         // It failed, go back to what it was!
-        for (int v = 0; v < nvar_p; ++v) {
-            P_new(v, k, j, i) = P_init(v, k, j, i);
-        }
+        // for (int v = 0; v < nvar_p; ++v) {
+        //     P_new(v, k, j, i) = P_init(v, k, j, i);
+        // }
 
     } else {
         successful_prim_recovery = true;
@@ -811,10 +817,7 @@ KOKKOS_INLINE_FUNCTION int solve_radiation_4d(
             return static_cast<int>(StatusImplicitStep::radsolve);
         }
     }
-    //For cell ijk print the initial U_new and U_init internal energy
-    // Let us select i = 10, j = 10, k = 10 for this print statement, you can change it as needed.
-    //i = 106, j = 44, k = 0, Ug_init = 1.194703976054861e+00, ug_final = 1.194703944411377e+00
-    
+  
     return static_cast<int>(StatusImplicitStep::success);
 }
 

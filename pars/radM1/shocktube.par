@@ -4,7 +4,7 @@
 problem_id = shock
 
 <parthenon/mesh>
-nx1 = 400
+nx1 = 800
 x1min = -10.0
 x1max = 10.0
 
@@ -85,10 +85,5 @@ src_rootfind_maxiter = 10
 on = true
 M_BH = 100
 rho_scale = 1e-4
-
-<debug>
-verbose = 1
-extra_checks = 2
-flag_verbose = 0
 
 
