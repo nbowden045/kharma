@@ -1,0 +1,64 @@
+diff --git a/src/coordinates/uniform_cartesian.hpp b/src/coordinates/uniform_cartesian.hpp
+index b10cbe0a..e4e68143 100644
+--- a/src/coordinates/uniform_cartesian.hpp
++++ b/src/coordinates/uniform_cartesian.hpp
+@@ -106,7 +106,7 @@ class UniformCartesian {
+     case 3:
+       return Xc<dir>(k);
+     default:
+-      PARTHENON_FAIL("Unknown dir");
++      //PARTHENON_FAIL("Unknown dir");
+       return 0; // To appease compiler
+     }
+   }
+@@ -135,7 +135,7 @@ class UniformCartesian {
+     case 3:
+       return Xf<dir, face>(k);
+     default:
+-      PARTHENON_FAIL("Unknown dir");
++      //PARTHENON_FAIL("Unknown dir");
+       return 0; // To appease compiler
+     }
+   }
+@@ -157,7 +157,7 @@ class UniformCartesian {
+     case 3:
+       return Xf<dir>(k);
+     default:
+-      PARTHENON_FAIL("Unknown dir");
++      //PARTHENON_FAIL("Unknown dir");
+       return 0; // To appease compiler
+     }
+   }
+@@ -194,7 +194,7 @@ class UniformCartesian {
+     case 3:
+       return X<dir, el>(k);
+     default:
+-      PARTHENON_FAIL("Unknown dir");
++      //PARTHENON_FAIL("Unknown dir");
+       return 0; // To appease compiler
+     }
+   }
+@@ -271,8 +271,8 @@ class UniformCartesian {
+     } else if constexpr (el == TE::NN) {
+       return 1.0;
+     }
+-    PARTHENON_FAIL("If you reach this point, someone has added a new value to the the "
+-                   "TopologicalElement enum.");
++    //PARTHENON_FAIL("If you reach this point, someone has added a new value to the the "
++    //               "TopologicalElement enum.");
+     return 0.0;
+   }
+ 
+diff --git a/src/interface/swarm_boundaries.hpp b/src/interface/swarm_boundaries.hpp
+index 168bd4f4..6b9602b6 100644
+--- a/src/interface/swarm_boundaries.hpp
++++ b/src/interface/swarm_boundaries.hpp
+@@ -21,7 +21,7 @@ class ParticleBound {
+  public:
+   KOKKOS_INLINE_FUNCTION virtual void Apply(const int n, double &x, double &y, double &z,
+                                             const SwarmDeviceContext &context) const {
+-    PARTHENON_FAIL("You are calling the ParticleBound abstract base class Apply method");
++    //PARTHENON_FAIL("You are calling the ParticleBound abstract base class Apply method");
+   }
+ };
+ 

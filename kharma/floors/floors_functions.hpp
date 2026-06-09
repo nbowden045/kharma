@@ -175,6 +175,12 @@ template<InjectionFrame frame>
 KOKKOS_INLINE_FUNCTION int apply_floors(FLOOR_ONE_ARGS);
 
 template<>
+KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::mixed_fluid_normal>(FLOOR_ONE_ARGS) { return 0; }
+
+template<>
+KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::mixed_normal_drift>(FLOOR_ONE_ARGS) { return 0; }
+
+template<>
 KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::fluid>(FLOOR_ONE_ARGS)
 {
     P(m_p.RHO, k, j, i) += m::max(0., rhoflr_max - P(m_p.RHO, k, j, i));
