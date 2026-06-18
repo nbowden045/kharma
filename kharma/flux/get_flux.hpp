@@ -269,131 +269,67 @@ inline TaskStatus GetFlux(MeshData<Real>* md)
     // At least, we should refactor to template loops on vchar/stress-energy T type
 
     Flag("GetFlux_" + std::to_string(dir) + "_left");
-    parthenon::par_for_outer(DEFAULT_OUTER_LOOP_PATTERN, "calc_flux_left",
-        pmb0->exec_space, flux_scratch_bytes, scratch_level, block.s, block.e, b.ks, b.ke,
-        b.js, b.je,
-        KOKKOS_LAMBDA(parthenon::team_mbr_t member,
-                      const int& bl,
+    parthenon::par_for(DEFAULT_LOOP_PATTERN, "calc_flux_left",
+        pmb0->exec_space, block.s, block.e, b.ks, b.ke,
+        b.js, b.je, b.is, b.ie,
+        KOKKOS_LAMBDA(const int& bl,
                       const int& k,
-                      const int& j)
+                      const int& j,
+                      const int& i)
         {
             const auto& G = U_all.GetCoords(bl);
-            ScratchPad2D<Real> Pl_s(member.team_scratch(scratch_level), nvar, n1);
-            ScratchPad2D<Real> Ul_s(member.team_scratch(scratch_level), nvar, n1);
-            ScratchPad2D<Real> Fl_s(member.team_scratch(scratch_level), nvar, n1);
 
-            // Copy in state (TODO(CEP) eliminate)
-            for (int p = 0; p < nvar; ++p) {
-                parthenon::par_for_inner(member, b.is, b.ie,
-                    [&](const int& i)
-                    {
-                        Pl_s(p, i) = Pl_all(bl, p, k, j, i);
-                    });
-            }
-            member.team_barrier();
+            // Declare temporary vectors
+            FourVectors Dtmp;
 
-            // LEFT FACES
-            parthenon::par_for_inner(member, b.is, b.ie,
-                [&](const int& i)
-                {
-                    auto Pl = Kokkos::subview(Pl_s, Kokkos::ALL(), i);
-                    auto Ul = Kokkos::subview(Ul_s, Kokkos::ALL(), i);
-                    auto Fl = Kokkos::subview(Fl_s, Kokkos::ALL(), i);
-                    // Declare temporary vectors
-                    FourVectors Dtmp;
+            // Left
+            GRMHD::calc_4vecs(G, Pl_all(bl), m_p, k, j, i, loc, Dtmp);
+            Flux::prim_to_flux(
+                G, Pl_all(bl), m_p, Dtmp, emhd_params, gam, k, j, i, 0, Ul_all(bl), m_u, loc);
+            Flux::prim_to_flux(
+                G, Pl_all(bl), m_p, Dtmp, emhd_params, gam, k, j, i, dir, Fl_all(bl), m_u, loc);
 
-                    // Left
-                    GRMHD::calc_4vecs(G, Pl, m_p, j, i, loc, Dtmp);
-                    Flux::prim_to_flux(
-                        G, Pl, m_p, Dtmp, emhd_params, gam, j, i, 0, Ul, m_u, loc);
-                    Flux::prim_to_flux(
-                        G, Pl, m_p, Dtmp, emhd_params, gam, j, i, dir, Fl, m_u, loc);
+            // Magnetosonic speeds
+            Real cmaxL, cminL;
+            Flux::vchar_global(G, Pl_all(bl), m_p, Dtmp, gam, emhd_params, k, j, i, loc, dir,
+                cmaxL, cminL);
 
-                    // Magnetosonic speeds
-                    Real cmaxL, cminL;
-                    Flux::vchar(G, Pl, m_p, Dtmp, gam, emhd_params, k, j, i, loc, dir,
-                        cmaxL, cminL);
-
-                    // Record speeds
-                    cmax(bl, dir - 1, k, j, i) = m::max(0., cmaxL);
-                    cmin(bl, dir - 1, k, j, i) = m::min(0., cminL);
-                });
-            member.team_barrier();
-
-            // Copy out state
-            for (int p = 0; p < nvar; ++p) {
-                parthenon::par_for_inner(member, b.is, b.ie,
-                    [&](const int& i)
-                    {
-                        Ul_all(bl, p, k, j, i) = Ul_s(p, i);
-                        Fl_all(bl, p, k, j, i) = Fl_s(p, i);
-                    });
-            }
+            // Record speeds
+            cmax(bl, dir - 1, k, j, i) = m::max(0., cmaxL);
+            cmin(bl, dir - 1, k, j, i) = m::min(0., cminL);
         });
     EndFlag();
 
     Flag("GetFlux_" + std::to_string(dir) + "_right");
-    parthenon::par_for_outer(DEFAULT_OUTER_LOOP_PATTERN, "calc_flux_right",
-        pmb0->exec_space, flux_scratch_bytes, scratch_level, block.s, block.e, b.ks, b.ke,
-        b.js, b.je,
-        KOKKOS_LAMBDA(parthenon::team_mbr_t member,
-                      const int& bl,
+    parthenon::par_for(DEFAULT_LOOP_PATTERN, "calc_flux_right",
+        pmb0->exec_space, block.s, block.e, b.ks, b.ke,
+        b.js, b.je, b.is, b.ie,
+        KOKKOS_LAMBDA(const int& bl,
                       const int& k,
-                      const int& j)
+                      const int& j,
+                      const int& i)
         {
             const auto& G = U_all.GetCoords(bl);
-            ScratchPad2D<Real> Pr_s(member.team_scratch(scratch_level), nvar, n1);
-            ScratchPad2D<Real> Ur_s(member.team_scratch(scratch_level), nvar, n1);
-            ScratchPad2D<Real> Fr_s(member.team_scratch(scratch_level), nvar, n1);
 
-            // Copy in state (TODO(CEP) eliminate)
-            for (int p = 0; p < nvar; ++p) {
-                parthenon::par_for_inner(member, b.is, b.ie,
-                    [&](const int& i)
-                    {
-                        Pr_s(p, i) = Pr_all(bl, p, k, j, i);
-                    });
-            }
-            member.team_barrier();
+            // Declare temporary vectors
+            FourVectors Dtmp;
+            // Right
+            GRMHD::calc_4vecs(G, Pr_all(bl), m_p, k, j, i, loc, Dtmp);
+            Flux::prim_to_flux(
+                G, Pr_all(bl), m_p, Dtmp, emhd_params, gam, k, j, i, 0, Ur_all(bl), m_u, loc);
+            Flux::prim_to_flux(
+                G, Pr_all(bl), m_p, Dtmp, emhd_params, gam, k, j, i, dir, Fr_all(bl), m_u, loc);
 
-            // RIGHT FACES, finalize signal speed
-            parthenon::par_for_inner(member, b.is, b.ie,
-                [&](const int& i)
-                {
-                    auto Pr = Kokkos::subview(Pr_s, Kokkos::ALL(), i);
-                    auto Ur = Kokkos::subview(Ur_s, Kokkos::ALL(), i);
-                    auto Fr = Kokkos::subview(Fr_s, Kokkos::ALL(), i);
-                    // Declare temporary vectors
-                    FourVectors Dtmp;
-                    // Right
-                    GRMHD::calc_4vecs(G, Pr, m_p, j, i, loc, Dtmp);
-                    Flux::prim_to_flux(
-                        G, Pr, m_p, Dtmp, emhd_params, gam, j, i, 0, Ur, m_u, loc);
-                    Flux::prim_to_flux(
-                        G, Pr, m_p, Dtmp, emhd_params, gam, j, i, dir, Fr, m_u, loc);
+            // Magnetosonic speeds
+            Real cmaxR, cminR;
+            Flux::vchar_global(G, Pr_all(bl), m_p, Dtmp, gam, emhd_params, k, j, i, loc, dir,
+                cmaxR, cminR);
 
-                    // Magnetosonic speeds
-                    Real cmaxR, cminR;
-                    Flux::vchar(G, Pr, m_p, Dtmp, gam, emhd_params, k, j, i, loc, dir,
-                        cmaxR, cminR);
-
-                    // Calculate cmax/min based on comparison with cached values
-                    cmax(bl, dir - 1, k, j, i) =
-                        m::max(cmax(bl, dir - 1, k, j, i), cmaxR);
-                    cmin(bl, dir - 1, k, j, i) =
-                        -m::min(cmin(bl, dir - 1, k, j, i), cminR);
-                });
-            member.team_barrier();
-
-            // Copy out state
-            for (int p = 0; p < nvar; ++p) {
-                parthenon::par_for_inner(member, b.is, b.ie,
-                    [&](const int& i)
-                    {
-                        Ur_all(bl, p, k, j, i) = Ur_s(p, i);
-                        Fr_all(bl, p, k, j, i) = Fr_s(p, i);
-                    });
-            }
+            // Calculate cmax/min based on comparison with cached values
+            cmax(bl, dir - 1, k, j, i) =
+                m::max(cmax(bl, dir - 1, k, j, i), cmaxR);
+            cmin(bl, dir - 1, k, j, i) =
+                -m::min(cmin(bl, dir - 1, k, j, i), cminR);
         });
     EndFlag();
 
