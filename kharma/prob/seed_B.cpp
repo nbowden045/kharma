@@ -349,6 +349,7 @@ TaskStatus SeedBFieldType(MeshBlockData<Real> *rc, ParameterInput *pin, IndexDom
                 B_CT::EdgeCurl<F2,2>(rc, A, B_Uf, domain);
                 B_CT::EdgeCurl<F3,2>(rc, A, B_Uf, domain);
             } else {
+                std::cout << std::endl; // flush messages in output buffer before we error
                 throw std::runtime_error("Must initialize 1D field directly!");
             }
             B_CT::BlockUtoP(rc, domain);
@@ -373,6 +374,7 @@ TaskStatus SeedBFieldType(MeshBlockData<Real> *rc, ParameterInput *pin, IndexDom
                     }
                 );
             } else {
+                std::cout << std::endl; // flush messages in output buffer before we error
                 throw std::runtime_error("Must initialize 1D field directly!");
             }
 
@@ -455,6 +457,7 @@ TaskStatus SeedBField(MeshData<Real> *md, ParameterInput *pin)
         } else if (b_field_type == "shock_tube") {
             status = SeedBFieldType<BSeedType::shock_tube>(rc, pin);
         } else {
+            std::cout << std::endl; // flush messages in output buffer before we error
             throw std::invalid_argument("Magnetic field seed type not supported: " + b_field_type);
         }
     }

@@ -71,8 +71,10 @@ std::shared_ptr<KHARMAPackage> B_CT::Initialize(ParameterInput *pin, std::shared
     // This relies entirely on the EMF communication for preserving the divergence
     bool lazy_prolongation = pin->GetOrAddBoolean("b_field", "lazy_prolongation", false);
     // Need to preserve divergence if you refine/derefine during sim i.e. AMR
-    if (lazy_prolongation && pin->GetString("parthenon/mesh", "refinement") == "adaptive")
+    if (lazy_prolongation && pin->GetString("parthenon/mesh", "refinement") == "adaptive") {
+        std::cout << std::endl; // flush messages in output buffer before we error
         throw std::runtime_error("Cannot use non-divergence-preserving prolongation in AMR!");
+    }
 
     // TODO don't set this unless we're reconnecting at boundaries (can't just check, we load Boundaries pkg later)
     int reconnection_outer_buffer = pin->GetOrAddBoolean("b_field", "reconnection_outer_buffer", 5);
@@ -287,7 +289,10 @@ TaskStatus B_CT::CalculateEMF(MeshData<Real> *md)
 {
     auto pmesh = md->GetMeshPointer();
     const int ndim = pmesh->ndim;
-    if (ndim < 2) throw std::runtime_error("Face-centered constrained transport does not support 1D! Use `flux_ct` instead.");
+    if (ndim < 2) {
+        std::cout << std::endl; // flush messages in output buffer before we error
+        throw std::runtime_error("Face-centered constrained transport does not support 1D! Use `flux_ct` instead.");
+    }
 
     // EMF temporary
     auto& emf_pack = md->PackVariables(std::vector<std::string>{"B_CT.emf"});
@@ -742,8 +747,10 @@ TaskStatus B_CT::PrintGlobalMaxDivB(MeshData<Real> *md, bool kill_on_large_divb)
             printf("Max DivB: %g\n", divb_max); // someday I'll learn stream options
         }
         if (kill_on_large_divb) {
-            if (divb_max > pmb0->packages.Get("B_CT")->Param<Real>("kill_on_divb_over"))
+            if (divb_max > pmb0->packages.Get("B_CT")->Param<Real>("kill_on_divb_over")) {
+                std::cout << std::endl; // flush messages in output buffer before we error
                 throw std::runtime_error("DivB exceeds maximum! Quitting...");
+            }
         }
     }
 

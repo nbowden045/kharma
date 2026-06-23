@@ -105,6 +105,7 @@ TaskStatus InitializeEMHDShock(std::shared_ptr<MeshBlockData<Real>>& rc, Paramet
         fp_dP  = fopen(fbvp_dP,  "r");
 
         if (fp_rho == NULL || fp_u == NULL || fp_u1 == NULL || fp_q == NULL || fp_dP == NULL) {
+            std::cout << std::endl; // flush messages in output buffer before we error
             throw std::runtime_error("Could not open conducting atmosphere solution!");
         }
 

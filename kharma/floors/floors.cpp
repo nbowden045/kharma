@@ -283,6 +283,7 @@ TaskStatus Floors::ApplyGRMHDFloors(MeshData<Real> *md, IndexDomain domain)
     } else if (pars.Get<InjectionFrame>("frame") == InjectionFrame::drift) {
         return ApplyFloorsInFrame<InjectionFrame::drift>(md, domain);
     } else {
+        std::cout << std::endl; // flush messages in output buffer before we error
         throw std::invalid_argument("Floors for requested frame not implemented!");
     }
 }

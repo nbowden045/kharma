@@ -515,7 +515,10 @@ void CancelBoundaryU3(MeshBlockData<Real> *rc, IndexDomain domain, bool coarse)
     const bool binner = KBoundaries::BoundaryIsInner(bface);
     const auto bname = KBoundaries::BoundaryName(bface);
     const auto bdir = KBoundaries::BoundaryDirection(bface);
-    if (bdir != 2) throw std::runtime_error("T3 Cancellation is only implemented for polar X2 boundaries!");
+    if (bdir != 2) {
+        std::cout << std::endl; // flush messages in output buffer before we error
+        throw std::runtime_error("T3 Cancellation is only implemented for polar X2 boundaries!");
+    }
 
     // Pull variables (TODO take packs & maps, see boundaries.cpp)
     PackIndexMap prims_map, cons_map;
@@ -590,7 +593,10 @@ void CancelBoundaryT3(MeshBlockData<Real> *rc, IndexDomain domain, bool coarse)
     const bool binner = KBoundaries::BoundaryIsInner(bface);
     const auto bname = KBoundaries::BoundaryName(bface);
     const auto bdir = KBoundaries::BoundaryDirection(bface);
-    if (bdir != 2) throw std::runtime_error("T3 Cancellation is only implemented for polar X2 boundaries!");
+    if (bdir != 2) {
+        std::cout << std::endl; // flush messages in output buffer before we error
+        throw std::runtime_error("T3 Cancellation is only implemented for polar X2 boundaries!");
+    }
 
     // Pull variables (TODO take packs & maps, see boundaries.cpp)
     PackIndexMap prims_map, cons_map;

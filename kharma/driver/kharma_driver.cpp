@@ -275,6 +275,7 @@ TaskID KHARMADriver::AddFluxCalculations(TaskID& t_start, TaskList& tl, MeshData
         t_calculate_flux3 = tl.AddTask(t_start_fluxes, Flux::GetFlux<RType::mp5, X3DIR>, md);
         break;
     default:
+        std::cout << std::endl; // flush messages in output buffer before we error
         throw std::invalid_argument("Unsupported reconstruction algorithm! Main supported algorithms: linear_mc, weno5, weno5_linear");
     }
     auto t_calc_fluxes = t_calculate_flux1 | t_calculate_flux2 | t_calculate_flux3;

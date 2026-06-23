@@ -73,6 +73,7 @@ std::shared_ptr<KHARMAPackage> KBoundaries::Initialize(ParameterInput *pin, std:
     params.Add("zero_polar_flux", zero_polar_flux);
     // Throw an error if both are set
     if (excise_polar_flux && zero_polar_flux) {
+        std::cout << std::endl; // flush messages in output buffer before we error
         throw std::runtime_error("Cannot set both boundaries/excise_polar_flux and boundaries/zero_polar_flux!");
     }
 
@@ -301,6 +302,7 @@ std::shared_ptr<KHARMAPackage> KBoundaries::Initialize(ParameterInput *pin, std:
                     break;
                 }
                 if (pin->GetString("coordinates", "transform") == "fmks" || pin->GetString("coordinates", "transform") == "funky")
+                    std::cout << std::endl; // flush messages in output buffer before we error
                     throw std::runtime_error("Transmitting polar boundary conditions require coordinates symmetric about theta=0!");
                 // TODO also check for wedge simulations x3<2pi
             } else if (btype == "outflow") {
@@ -352,6 +354,7 @@ std::shared_ptr<KHARMAPackage> KBoundaries::Initialize(ParameterInput *pin, std:
                     break;
                 }
             } else {
+                std::cout << std::endl; // flush messages in output buffer before we error
                 throw std::runtime_error("Unknown boundary type: "+btype);
             }
         }
@@ -361,12 +364,15 @@ std::shared_ptr<KHARMAPackage> KBoundaries::Initialize(ParameterInput *pin, std:
     if (pin->GetInteger("parthenon/mesh", "nx3") != pin->GetInteger("parthenon/meshblock", "nx3") ||
         pin->GetInteger("parthenon/mesh", "nx3") == 1) {
         if (pin->GetString("boundaries", "inner_x3") == "transmitting" || pin->GetString("boundaries", "outer_x3") == "transmitting")
+            std::cout << std::endl; // flush messages in output buffer before we error
             throw std::runtime_error("Transmitting polar boundary conditions require 3D with one block in x3!");
         if (params.Get<bool>("cancel_U3_inner_x3") || params.Get<bool>("cancel_U3_outer_x3") ||
             params.Get<bool>("cancel_T3_inner_x3") || params.Get<bool>("cancel_T3_outer_x3"))
+            std::cout << std::endl; // flush messages in output buffer before we error
             throw std::runtime_error("Polar cancellations require 3D with one block in x3!");
         if (packages->AllPackages().count("B_CT") &&
             (params.Get<bool>("reconnect_B3_inner_x3") || params.Get<bool>("reconnect_B3_outer_x3")))
+            std::cout << std::endl; // flush messages in output buffer before we error
             throw std::runtime_error("Polar reconnections require 3D with one block in x3!");
     }
 
@@ -704,6 +710,7 @@ TaskStatus KBoundaries::FixFlux(MeshData<Real> *md)
             if (params.Get<bool>("excise_flux_" + bname)) {
                 // ...and if this face of the block corresponds to a global boundary...
                 if (IsPhysicalBoundary(pmb, bface)) {
+                    std::cout << std::endl; // flush messages in output buffer before we error
                     if (bdir != 2) throw std::runtime_error("Excised polar fluxes only fully implemented in X2!");
 
                     // Pack w/B to match indices with the `Flux.X` below
@@ -893,6 +900,7 @@ void KBoundaries::AddSource(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDoma
             if (params.Get<bool>("excise_flux_" + bname)) {
                 // ...and if this face of the block corresponds to a global boundary...
                 if (IsPhysicalBoundary(pmb, bface)) {
+                    std::cout << std::endl; // flush messages in output buffer before we error
                     if (bdir != 2) throw std::runtime_error("Excised polar fluxes only fully implemented in X2!");
 
                     const IndexRange3 bi = KDomain::GetRange(rc, IndexDomain::interior);

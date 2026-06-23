@@ -47,8 +47,10 @@ std::shared_ptr<KHARMAPackage> ISMR::Initialize(ParameterInput *pin, std::shared
     // TODO add "poles" specifically if we ever support other areas
     uint nlevels = (uint) pin->GetOrAddInteger("ismr", "nlevels", 1);
     params.Add("nlevels", nlevels);
-    if (nlevels < 1)
+    if (nlevels < 1) {
+        std::cout << std::endl; // flush messages in output buffer before we error
         throw std::runtime_error("Internal SMR requires a positive number of levels!");
+    }
 
     // ISMR cache: not evolved, immediately copied to fluid state after averaging
     // Must be total size of variable list
@@ -60,8 +62,10 @@ std::shared_ptr<KHARMAPackage> ISMR::Initialize(ParameterInput *pin, std::shared
     pkg->AddField("ismr.vars_avg", m);
 
     // Incompatible with B_FluxCT due to non-local divB, yell
-    if (packages->AllPackages().count("B_FluxCT"))
+    if (packages->AllPackages().count("B_FluxCT")) {
+        std::cout << std::endl; // flush messages in output buffer before we error
         throw std::runtime_error("Internal SMR is not compatible with Flux-CT magnetic field transport!");
+    }
     // Otherwise declare a face temporary
     if (packages->AllPackages().count("B_CT")) {
         m = Metadata({Metadata::Real, Metadata::Face, Metadata::Derived, Metadata::OneCopy});
@@ -69,8 +73,10 @@ std::shared_ptr<KHARMAPackage> ISMR::Initialize(ParameterInput *pin, std::shared
     }
 
     // Incompatible with 2D simulations
-    if (pin->GetInteger("parthenon/meshblock", "nx3") == 1)
+    if (pin->GetInteger("parthenon/meshblock", "nx3") == 1) {
+        std::cout << std::endl; // flush messages in output buffer before we error
         throw std::runtime_error("Internal SMR is not compatible with 2D blocks or meshes!");
+    }
 
     // TODO register a split-operator callback?
 

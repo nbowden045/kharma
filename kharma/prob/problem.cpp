@@ -129,6 +129,7 @@ void KHARMA::ProblemGenerator(MeshBlock *pmb, ParameterInput *pin)
 
     // If we didn't initialize a problem, yell
     if (status != TaskStatus::complete) {
+        std::cout << std::endl; // flush messages in output buffer before we error
         throw std::invalid_argument("Invalid or incomplete problem: "+prob);
     }
 

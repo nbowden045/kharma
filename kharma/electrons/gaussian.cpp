@@ -117,6 +117,7 @@ void create_grf(int Nx1, int Nx2, double lx1, double lx2,
 void create_grf(int Nx1, int Nx2, double lx1, double lx2, 
                     double * dv1, double * dv2)
 {
+    std::cout << std::endl; // flush messages in output buffer before we error
     throw std::runtime_error("Attempted to use an FFT to generate a Gaussian random field, but KHARMA was compiled without FFT support!");
 }
 #endif
