@@ -301,9 +301,10 @@ std::shared_ptr<KHARMAPackage> KBoundaries::Initialize(ParameterInput *pin, std:
                 default:
                     break;
                 }
-                if (pin->GetString("coordinates", "transform") == "fmks" || pin->GetString("coordinates", "transform") == "funky")
+                if (pin->GetString("coordinates", "transform") == "fmks" || pin->GetString("coordinates", "transform") == "funky") {
                     std::cout << std::endl; // flush messages in output buffer before we error
                     throw std::runtime_error("Transmitting polar boundary conditions require coordinates symmetric about theta=0!");
+                }
                 // TODO also check for wedge simulations x3<2pi
             } else if (btype == "outflow") {
                 switch (bface) {
@@ -363,17 +364,22 @@ std::shared_ptr<KHARMAPackage> KBoundaries::Initialize(ParameterInput *pin, std:
     // If we've split in the phi direction or we're running in 2D
     if (pin->GetInteger("parthenon/mesh", "nx3") != pin->GetInteger("parthenon/meshblock", "nx3") ||
         pin->GetInteger("parthenon/mesh", "nx3") == 1) {
-        if (pin->GetString("boundaries", "inner_x3") == "transmitting" || pin->GetString("boundaries", "outer_x3") == "transmitting")
+        if (pin->GetString("boundaries", "inner_x3") == "transmitting" || pin->GetString("boundaries", "outer_x3") == "transmitting") {
             std::cout << std::endl; // flush messages in output buffer before we error
             throw std::runtime_error("Transmitting polar boundary conditions require 3D with one block in x3!");
+        }
         if (params.Get<bool>("cancel_U3_inner_x3") || params.Get<bool>("cancel_U3_outer_x3") ||
             params.Get<bool>("cancel_T3_inner_x3") || params.Get<bool>("cancel_T3_outer_x3"))
+        {
             std::cout << std::endl; // flush messages in output buffer before we error
             throw std::runtime_error("Polar cancellations require 3D with one block in x3!");
+        }
         if (packages->AllPackages().count("B_CT") &&
             (params.Get<bool>("reconnect_B3_inner_x3") || params.Get<bool>("reconnect_B3_outer_x3")))
+        {
             std::cout << std::endl; // flush messages in output buffer before we error
             throw std::runtime_error("Polar reconnections require 3D with one block in x3!");
+        }
     }
 
     // Callbacks
@@ -710,8 +716,10 @@ TaskStatus KBoundaries::FixFlux(MeshData<Real> *md)
             if (params.Get<bool>("excise_flux_" + bname)) {
                 // ...and if this face of the block corresponds to a global boundary...
                 if (IsPhysicalBoundary(pmb, bface)) {
-                    std::cout << std::endl; // flush messages in output buffer before we error
-                    if (bdir != 2) throw std::runtime_error("Excised polar fluxes only fully implemented in X2!");
+                    if (bdir != 2) {
+                        std::cout << std::endl; // flush messages in output buffer before we error
+                        throw std::runtime_error("Excised polar fluxes only fully implemented in X2!");
+                    }
 
                     // Pack w/B to match indices with the `Flux.X` below
                     // We won't *update* B field though
@@ -900,8 +908,10 @@ void KBoundaries::AddSource(MeshData<Real> *md, MeshData<Real> *mdudt, IndexDoma
             if (params.Get<bool>("excise_flux_" + bname)) {
                 // ...and if this face of the block corresponds to a global boundary...
                 if (IsPhysicalBoundary(pmb, bface)) {
-                    std::cout << std::endl; // flush messages in output buffer before we error
-                    if (bdir != 2) throw std::runtime_error("Excised polar fluxes only fully implemented in X2!");
+                    if (bdir != 2) {
+                        std::cout << std::endl; // flush messages in output buffer before we error
+                        throw std::runtime_error("Excised polar fluxes only fully implemented in X2!");
+                    }
 
                     const IndexRange3 bi = KDomain::GetRange(rc, IndexDomain::interior);
 
