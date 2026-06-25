@@ -2,9 +2,9 @@ name: Check Formatting
 
 on:
   push:
-    branches: [ main ]
+    branches: [ stable, dev ]
   pull_request:
-    branches: [ main ]
+    branches: [ stable, dev ]
 
 jobs:
     formatting:
