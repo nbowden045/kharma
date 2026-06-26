@@ -269,9 +269,8 @@ inline TaskStatus GetFlux(MeshData<Real>* md)
     // At least, we should refactor to template loops on vchar/stress-energy T type
 
     Flag("GetFlux_" + std::to_string(dir) + "_left");
-    parthenon::par_for(DEFAULT_LOOP_PATTERN, "calc_flux_left",
-        pmb0->exec_space, block.s, block.e, b.ks, b.ke,
-        b.js, b.je, b.is, b.ie,
+    parthenon::par_for(DEFAULT_LOOP_PATTERN, "calc_flux_left", pmb0->exec_space, block.s,
+        block.e, b.ks, b.ke, b.js, b.je, b.is, b.ie,
         KOKKOS_LAMBDA(const int& bl,
                       const int& k,
                       const int& j,
@@ -284,15 +283,15 @@ inline TaskStatus GetFlux(MeshData<Real>* md)
 
             // Left
             GRMHD::calc_4vecs(G, Pl_all(bl), m_p, k, j, i, loc, Dtmp);
-            Flux::prim_to_flux(
-                G, Pl_all(bl), m_p, Dtmp, emhd_params, gam, k, j, i, 0, Ul_all(bl), m_u, loc);
-            Flux::prim_to_flux(
-                G, Pl_all(bl), m_p, Dtmp, emhd_params, gam, k, j, i, dir, Fl_all(bl), m_u, loc);
+            Flux::prim_to_flux(G, Pl_all(bl), m_p, Dtmp, emhd_params, gam, k, j, i, 0,
+                Ul_all(bl), m_u, loc);
+            Flux::prim_to_flux(G, Pl_all(bl), m_p, Dtmp, emhd_params, gam, k, j, i, dir,
+                Fl_all(bl), m_u, loc);
 
             // Magnetosonic speeds
             Real cmaxL, cminL;
-            Flux::vchar_global(G, Pl_all(bl), m_p, Dtmp, gam, emhd_params, k, j, i, loc, dir,
-                cmaxL, cminL);
+            Flux::vchar_global(G, Pl_all(bl), m_p, Dtmp, gam, emhd_params, k, j, i, loc,
+                dir, cmaxL, cminL);
 
             // Record speeds
             cmax(bl, dir - 1, k, j, i) = m::max(0., cmaxL);
@@ -301,9 +300,8 @@ inline TaskStatus GetFlux(MeshData<Real>* md)
     EndFlag();
 
     Flag("GetFlux_" + std::to_string(dir) + "_right");
-    parthenon::par_for(DEFAULT_LOOP_PATTERN, "calc_flux_right",
-        pmb0->exec_space, block.s, block.e, b.ks, b.ke,
-        b.js, b.je, b.is, b.ie,
+    parthenon::par_for(DEFAULT_LOOP_PATTERN, "calc_flux_right", pmb0->exec_space, block.s,
+        block.e, b.ks, b.ke, b.js, b.je, b.is, b.ie,
         KOKKOS_LAMBDA(const int& bl,
                       const int& k,
                       const int& j,
@@ -315,21 +313,19 @@ inline TaskStatus GetFlux(MeshData<Real>* md)
             FourVectors Dtmp;
             // Right
             GRMHD::calc_4vecs(G, Pr_all(bl), m_p, k, j, i, loc, Dtmp);
-            Flux::prim_to_flux(
-                G, Pr_all(bl), m_p, Dtmp, emhd_params, gam, k, j, i, 0, Ur_all(bl), m_u, loc);
-            Flux::prim_to_flux(
-                G, Pr_all(bl), m_p, Dtmp, emhd_params, gam, k, j, i, dir, Fr_all(bl), m_u, loc);
+            Flux::prim_to_flux(G, Pr_all(bl), m_p, Dtmp, emhd_params, gam, k, j, i, 0,
+                Ur_all(bl), m_u, loc);
+            Flux::prim_to_flux(G, Pr_all(bl), m_p, Dtmp, emhd_params, gam, k, j, i, dir,
+                Fr_all(bl), m_u, loc);
 
             // Magnetosonic speeds
             Real cmaxR, cminR;
-            Flux::vchar_global(G, Pr_all(bl), m_p, Dtmp, gam, emhd_params, k, j, i, loc, dir,
-                cmaxR, cminR);
+            Flux::vchar_global(G, Pr_all(bl), m_p, Dtmp, gam, emhd_params, k, j, i, loc,
+                dir, cmaxR, cminR);
 
             // Calculate cmax/min based on comparison with cached values
-            cmax(bl, dir - 1, k, j, i) =
-                m::max(cmax(bl, dir - 1, k, j, i), cmaxR);
-            cmin(bl, dir - 1, k, j, i) =
-                -m::min(cmin(bl, dir - 1, k, j, i), cminR);
+            cmax(bl, dir - 1, k, j, i) = m::max(cmax(bl, dir - 1, k, j, i), cmaxR);
+            cmin(bl, dir - 1, k, j, i) = -m::min(cmin(bl, dir - 1, k, j, i), cminR);
         });
     EndFlag();
 
