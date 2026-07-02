@@ -56,6 +56,7 @@ namespace Reductions {
 // HIPCC doesn't like passing function pointers as we used to do,
 // and it doesn't vectorize anyway. Look forward to more of this pattern in the code
 enum class Var{phi, bsq, gas_pressure, beta, rhou0, mix_T00, mix_T01, mix_T02, mix_T03,
+               abs_rhou0, abs_mix_T00, abs_mix_T01, abs_mix_T02, abs_mix_T03,
                mdot, edot, ldot, mdot_flux, edot_flux, ldot_flux, eht_lum, jet_lum,
                nan_ctop, zero_ctop, neg_rho, neg_u, neg_rhout};
 
@@ -117,6 +118,31 @@ template <>
 KOKKOS_INLINE_FUNCTION Real reduction_var<Var::mix_T03>(REDUCE_FUNCTION_ARGS)
 {
     return U(m_u.U3, k, j, i);
+}
+template <>
+KOKKOS_INLINE_FUNCTION Real reduction_var<Var::abs_rhou0>(REDUCE_FUNCTION_ARGS)
+{
+    return m::abs(U(m_u.RHO, k, j, i));
+}
+template <>
+KOKKOS_INLINE_FUNCTION Real reduction_var<Var::abs_mix_T00>(REDUCE_FUNCTION_ARGS)
+{
+    return m::abs(U(m_u.UU, k, j, i));
+}
+template <>
+KOKKOS_INLINE_FUNCTION Real reduction_var<Var::abs_mix_T01>(REDUCE_FUNCTION_ARGS)
+{
+    return m::abs(U(m_u.U1, k, j, i));
+}
+template <>
+KOKKOS_INLINE_FUNCTION Real reduction_var<Var::abs_mix_T02>(REDUCE_FUNCTION_ARGS)
+{
+    return m::abs(U(m_u.U2, k, j, i));
+}
+template <>
+KOKKOS_INLINE_FUNCTION Real reduction_var<Var::abs_mix_T03>(REDUCE_FUNCTION_ARGS)
+{
+    return m::abs(U(m_u.U3, k, j, i));
 }
 
 // Accretion rates: return a zone's contribution to the surface integral

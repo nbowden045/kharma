@@ -64,6 +64,7 @@ KOKKOS_INLINE_FUNCTION void apply_ceilings(const GRCoordinates& G, const Variabl
     Real u_over_rho = P(m_p.UU, k, j, i) / P(m_p.RHO, k, j, i);
 
     // 1. Limit gamma with respect to normal observer
+    // TODO ADJUST RHO
     if (gamma > myfloors.gamma_max) {
         Real f = m::sqrt((SQR(myfloors.gamma_max) - 1.) / (SQR(gamma) - 1.));
         VLOOP P(m_p.U1+v, k, j, i) *= f;
@@ -179,7 +180,7 @@ KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::fluid>(FLOOR_ONE_ARGS)
 {
     P(m_p.RHO, k, j, i) += m::max(0., rhoflr_max - P(m_p.RHO, k, j, i));
     P(m_p.UU, k, j, i)  += m::max(0., uflr_max - P(m_p.UU, k, j, i));
-    return 0;
+    return -1;
 }
 
 template<>
@@ -253,7 +254,7 @@ KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::drift>(FLOOR_ONE_ARGS)
     P(m_p.U1, k, j, i) = Dtmp.ucon[1] + (beta[1] * Dtmp.ucon[0]);
     P(m_p.U2, k, j, i) = Dtmp.ucon[2] + (beta[2] * Dtmp.ucon[0]);
     P(m_p.U3, k, j, i) = Dtmp.ucon[3] + (beta[3] * Dtmp.ucon[0]);
-    return 0;
+    return -1;
 }
 
 // There's a way to avoid code duplication here, but it imposes more template madness

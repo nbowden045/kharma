@@ -208,7 +208,13 @@ std::shared_ptr<KHARMAPackage> Initialize(ParameterInput *pin, std::shared_ptr<P
         hst_vars.emplace_back(parthenon::HistoryOutputVar(UserHistoryOperation::sum, Reductions::Total<Reductions::Var::mix_T00>, "Egas"));
         hst_vars.emplace_back(parthenon::HistoryOutputVar(UserHistoryOperation::sum, Reductions::Total<Reductions::Var::mix_T01>, "X1_Mom"));
         hst_vars.emplace_back(parthenon::HistoryOutputVar(UserHistoryOperation::sum, Reductions::Total<Reductions::Var::mix_T02>, "X2_Mom"));
-        hst_vars.emplace_back(parthenon::HistoryOutputVar(UserHistoryOperation::sum, Reductions::Total<Reductions::Var::mix_T03>, "Ang_Mom"));
+        hst_vars.emplace_back(parthenon::HistoryOutputVar(UserHistoryOperation::sum, Reductions::Total<Reductions::Var::mix_T03>, "X3_Mom"));
+
+        hst_vars.emplace_back(parthenon::HistoryOutputVar(UserHistoryOperation::sum, Reductions::Total<Reductions::Var::abs_rhou0>, "AbsMass"));
+        hst_vars.emplace_back(parthenon::HistoryOutputVar(UserHistoryOperation::sum, Reductions::Total<Reductions::Var::abs_mix_T00>, "AbsEgas"));
+        hst_vars.emplace_back(parthenon::HistoryOutputVar(UserHistoryOperation::sum, Reductions::Total<Reductions::Var::abs_mix_T01>, "AbsX1_Mom"));
+        hst_vars.emplace_back(parthenon::HistoryOutputVar(UserHistoryOperation::sum, Reductions::Total<Reductions::Var::abs_mix_T02>, "AbsX2_Mom"));
+        hst_vars.emplace_back(parthenon::HistoryOutputVar(UserHistoryOperation::sum, Reductions::Total<Reductions::Var::abs_mix_T03>, "AbsX3_Mom"));        
     }
     // TODO these are probably more useful at/within/without certain radii
     if (do_all || KHARMA::FieldIsOutput(pin, "luminosities")) {
@@ -229,7 +235,7 @@ std::shared_ptr<KHARMAPackage> Initialize(ParameterInput *pin, std::shared_ptr<P
             hst_vars.emplace_back(parthenon::HistoryOutputVar(UserHistoryOperation::sum, Reductions::SumAt5M<Reductions::Var::ldot>, "Ldot_5M"));
         }
 
-        // Add event-horizon fluxes by default as a check
+        // Add versions from the in-code fluxes by default as a check
         if (true || do_all || KHARMA::FieldIsOutput(pin, "eh_fluxes_flux")) {
             hst_vars.emplace_back(parthenon::HistoryOutputVar(UserHistoryOperation::sum, Reductions::SumAt0<Reductions::Var::mdot_flux>, "Mdot_Flux"));
             hst_vars.emplace_back(parthenon::HistoryOutputVar(UserHistoryOperation::sum, Reductions::SumAtEH<Reductions::Var::mdot_flux>, "Mdot_EH_Flux"));

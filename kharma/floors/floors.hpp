@@ -65,6 +65,11 @@ static constexpr int GEOM_U_FLUX = 8192;
 // Yet more flags for floors hit during inversion
 static constexpr int FIXUP_MOMENTUM = 16384;
 static constexpr int FIXUP_ENERGY = 32768;
+static constexpr int FIXUP_MOMENTUM_FAILED = 65536;
+static constexpr int FIXUP_MOMENTUM_GAMMA = 131072;
+static constexpr int FIXUP_MOMENTUM_RANGE = 262144;
+static constexpr int FIXUP_RHO_DIRECT = 524288;
+static constexpr int FIXUP_U_DIRECT = 1048576;
 // Lowest flag value. Needed for combining floor and other return flags
 static constexpr int MINIMUM = GEOM_RHO;
 
@@ -83,7 +88,12 @@ static const std::map<int, std::string> flag_names = {
     {GEOM_RHO_FLUX, "GEOM_RHO_ON_RECON"},
     {GEOM_U_FLUX, "GEOM_U_ON_RECON"},
     {FIXUP_MOMENTUM, "MOMENTUM_FIXUP"},
-    {FIXUP_ENERGY, "ENERGY_FIXUP"}
+    {FIXUP_ENERGY, "ENERGY_FIXUP"},
+    {FIXUP_MOMENTUM_FAILED, "ENERGY_FIXUP_FROM_SOLVE_FAIL"},
+    {FIXUP_MOMENTUM_GAMMA, "ENERGY_FIXUP_FOUND_BAD_GAMMA"},
+    {FIXUP_MOMENTUM_RANGE, "ENERGY_FIXUP_BAD_RANGE"},
+    {FIXUP_RHO_DIRECT, "ENERGY_FIXUP_BAD_RHO"},
+    {FIXUP_U_DIRECT, "ENERGY_FIXUP_BAD_U"}
 };
 }
 

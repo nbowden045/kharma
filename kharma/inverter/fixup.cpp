@@ -166,6 +166,7 @@ TaskStatus Inverter::VelRecover(MeshBlockData<Real> *rc)
 
     auto &pars = pmb->packages.Get("Inverter")->AllParams();
     const Real tol = pars.Get<Real>("err_tol");
+    const bool momentum_steal = pars.Get<bool>("momentum_steal");
 
     const Real gam = pmb->packages.Get("GRMHD")->Param<Real>("gamma");
 
@@ -177,8 +178,9 @@ TaskStatus Inverter::VelRecover(MeshBlockData<Real> *rc)
                                         pmb->packages.Get("Floors")->Param<Floors::Prescription>("prescription_inner") :
                                         pmb->packages.Get("Inverter")->Param<Floors::Prescription>("inverter_prescription");
 
-    // Get floor flag
+    // Get flags
     GridScalar fflag = rc->Get("fflag").data;
+    GridScalar pflag = rc->Get("pflag").data;
 
     // We need the full packs of prims/cons in order to fix internal energy
     // Pack new variables
@@ -194,29 +196,22 @@ TaskStatus Inverter::VelRecover(MeshBlockData<Real> *rc)
     const auto& G = pmb->coords;
 
     // Minimum internal energy to set here. Can be anything small
-    // const Real umin = floors.u_min_const;
+    //const Real umin = floors.u_min_const;
     const Real umin = 1e-15;
-
-    const Real bad_vel_tolerance = 200*tol;
 
     // If after the first round of floors, we still reconstructed 
     pmb->par_for("fix_U_to_P_energy", b.ks, b.ke, b.js, b.je, b.is, b.ie,
         KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
-            // If we reconstructed a negative or zero internal energy (even after floors!)
-            // const Real rho = P(m_p.RHO, k, j, i);
-            // const Real u = P(m_p.UU, k, j, i);
-            const Real uvec[NVEC] = {P(m_p.U1, k, j, i), P(m_p.U2, k, j, i), P(m_p.U3, k, j, i)};
-            const Real B_P[NVEC] = {P(m_p.B1, k, j, i), P(m_p.B2, k, j, i), P(m_p.B3, k, j, i)};
-            Real rho_ut, T[GR_DIM];
-            // GRMHD::p_to_u_mhd(G, rho, u, uvec, B_P, gam, k, j, i, rho_ut, T);
-            if (P(m_p.UU, k, j, i) < umin) {
-                // ((m::abs((T[1] - U(m_u.U1, k, j, i)) / U(m_u.U1, k, j, i)) > bad_vel_tolerance) &&
-                //  (m::abs(U(m_u.U1, k, j, i)) > bad_vel_tolerance)) ||
-                // ((m::abs((T[2] - U(m_u.U2, k, j, i)) / U(m_u.U2, k, j, i)) > bad_vel_tolerance) &&
-                //  (m::abs(U(m_u.U2, k, j, i) > bad_vel_tolerance))) ||
-                // ((m::abs((T[3] - U(m_u.U3, k, j, i)) / U(m_u.U3, k, j, i)) > bad_vel_tolerance) &&
-                //  (m::abs(U(m_u.U3, k, j, i) > bad_vel_tolerance)))) {
-                // Add to existing floor flags
+            // If the solve failed, because we reconstructed a
+            // negative or zero internal energy (even after floors!)
+            if (failed(pflag(k, j, i)) && (P(m_p.UU, k, j, i) < umin)) {
+                // const Real rho = P(m_p.RHO, k, j, i);
+                // const Real u = P(m_p.UU, k, j, i);
+                const Real uvec[NVEC] = {P(m_p.U1, k, j, i), P(m_p.U2, k, j, i), P(m_p.U3, k, j, i)};
+                const Real B_P[NVEC] = {P(m_p.B1, k, j, i), P(m_p.B2, k, j, i), P(m_p.B3, k, j, i)};
+                // Real rho_ut, T[GR_DIM];
+                // GRMHD::p_to_u_mhd(G, rho, u, uvec, B_P, gam, k, j, i, rho_ut, T);
+    
                 int fflagl = fflag(0, k, j, i);
 
                 // Calculate P->U on the inverted values
@@ -226,9 +221,13 @@ TaskStatus Inverter::VelRecover(MeshBlockData<Real> *rc)
 
                 // Calculate the total energy of the fluid at rest
                 const Real uvec0[NVEC] = {0.};
-                GRMHD::p_to_u_mhd(G, D, umin, uvec0, B_P, gam, k, j, i, rho_ut, T);
-                // If we're below the at-rest energy, just bump it to that and kill all kinetic energy
-                if (m::abs(T[0]) >= m::abs(U(m_u.UU, k, j, i))) {
+                Real rho_ut = 0.;
+                Real Trest[GR_DIM] = {0.};
+                GRMHD::p_to_u_mhd(G, D, umin, uvec0, B_P, gam, k, j, i, rho_ut, Trest);
+                // If we're below the at-rest energy (within tolerance),
+                // just bump it to that and kill all kinetic energy
+                if ((Trest[0] - U(m_u.UU, k, j, i)) / U(m_u.UU, k, j, i) > -tol ||
+                    !momentum_steal) {
                     // W = 1
                     P(m_p.RHO, k, j, i) = D;
                     P(m_p.UU, k, j, i) = umin;
@@ -246,26 +245,25 @@ TaskStatus Inverter::VelRecover(MeshBlockData<Real> *rc)
                         const Real uv[NVEC] = {gamma_fac * uvec[0],
                                             gamma_fac * uvec[1],
                                             gamma_fac * uvec[2]};
-                        // Rescale rest mass
-                        const Real rho = D * iW;
-
                         // Calculate tensor (we only need T0)
-                        GRMHD::p_to_u_mhd(G, rho, umin, uv, B_P, gam, k, j, i, rho_ut, T);
+                        Real rho_ut, T[GR_DIM];
+                        GRMHD::p_to_u_mhd(G, D * iW, umin, uv, B_P, gam, k, j, i, rho_ut, T);
                         // Check that it matches
                         return (T[0] - U(m_u.UU, k, j, i)) / U(m_u.UU, k, j, i);
                     };
 
                     // Rootfind for iW that would have produced the current u
                     bool e_solve_failed = false;
-                    Real iWm = 1 / 51., iWp = 1.;
+                    Real iWm = 1/W, iWp = 1.;
                     Real iW;
                     if (f(iWp) * f(iWm) > 0.) {
                         e_solve_failed = true;
+                        fflagl |= Floors::FFlag::FIXUP_MOMENTUM_RANGE;
                     } else {
-                        Real iWc = 0.75;
+                        Real iWc = (iWp + iWm) / 2.;
                         while (1) {
                             Real resv = m::abs(f(iWc));
-                            if ((resv < tol) || (m::abs((iWp - iWm) / 2) < tol)) {
+                            if ((resv < tol) || (m::abs((iWp - iWm) / 2) < tol/10)) {
                                 iW = iWc;
                                 e_solve_failed = (resv > tol);
                                 break;
@@ -281,8 +279,14 @@ TaskStatus Inverter::VelRecover(MeshBlockData<Real> *rc)
 
                     // Compute what we really need
                     Real gamma_fac = m::sqrt((SQR(1./iW) - 1.) / (SQR(W) - 1.));
-                    if (!e_solve_failed && gamma_fac < 1) {
+                    // if (gamma_fac > 1) {
+                    //     fprintf(stderr, "correcting gamma_fac: %g\n", gamma_fac);
+                    //     gamma_fac = 0.;
+                    //     iW = 1.; // Set solve to be whatever W was
+                    // }
+                    if (!e_solve_failed && gamma_fac <= 1) {
                         // Rescale just the density & velocities with new iW
+                        // TODO(CEP) still limit iW >= etc
                         P(m_p.RHO, k, j, i) = D * iW;
                         P(m_p.UU, k, j, i) = umin;
                         P(m_p.U1, k, j, i) *= gamma_fac;
@@ -292,22 +296,45 @@ TaskStatus Inverter::VelRecover(MeshBlockData<Real> *rc)
                     } else {
                         // The only reason this *should* fail is if we missed
                         // somehow that we really do lack the rest energy
+                        // OR due to round-off we solved for a higher vel than we had
+                        if (gamma_fac > 1 && !e_solve_failed) {
+                            fflagl |= Floors::FFlag::FIXUP_MOMENTUM_GAMMA;
+                            // Refresh initial T, we used it in solve
+                            Real T[GR_DIM];
+                            GRMHD::p_to_u_mhd(G, P(m_p.RHO, k, j, i), P(m_p.UU, k, j, i),
+                                                uvec, B_P, gam, k, j, i, rho_ut, T);
+                            // Compute T from solved vals to compare
+                            Real Tsolved[GR_DIM] = {0.};
+                            const Real uvecr[NDIM] = {uvec[0]*gamma_fac, uvec[1]*gamma_fac, uvec[2]*gamma_fac};
+                            GRMHD::p_to_u_mhd(G, D * iW, umin, uvecr, B_P, gam, k, j, i, rho_ut, Tsolved);
+                            printf("bad gamma recovery: total deficit %g rest deficit %g remaining deficit %g\nfinal gamma_fac: %g rho %g u %g uvec %g %g %g B %g %g %g\n",
+                                    (T[0] - U(m_u.UU, k, j, i)) / U(m_u.UU, k, j, i),
+                                    (Trest[0] - U(m_u.UU, k, j, i)) / U(m_u.UU, k, j, i),
+                                    (Tsolved[0] - U(m_u.UU, k, j, i)) / U(m_u.UU, k, j, i), gamma_fac,
+                                    D * iW, umin, uvecr[0], uvecr[1], uvecr[2], B_P[0], B_P[1], B_P[2]);
+                        } else {
+                            fflagl |= Floors::FFlag::FIXUP_MOMENTUM_FAILED;
+                        }
                         P(m_p.RHO, k, j, i) = D;
                         P(m_p.UU, k, j, i) = umin;
                         P(m_p.U1, k, j, i) = 0.;
                         P(m_p.U2, k, j, i) = 0.;
                         P(m_p.U3, k, j, i) = 0.;
-                        fflagl |= Floors::FFlag::FIXUP_ENERGY;
                     }
                 }
-                fflag(0, k, j, i) = fflagl;
 
-                // Reapply ceilings
-                apply_ceilings(G, P, m_p, gam, k, j, i, floors, floors_inner, U, m_u);
+                // Reapply ceilings TODO(CEP) gamma ceiling doesn't adjust rho!
+                //apply_ceilings(G, P, m_p, gam, k, j, i, floors, floors_inner, U, m_u);
                 // Set remaining floors the dumb way if they're still low
-                // TODO(BSP) record
-                P(m_p.RHO, k, j, i) = m::max(P(m_p.RHO, k, j, i), floors.rho_min_const);
-                P(m_p.UU, k, j, i) = m::max(P(m_p.UU, k, j, i), floors.u_min_const);
+                if (P(m_p.RHO, k, j, i) < floors.rho_min_const) {
+                    P(m_p.RHO, k, j, i) = floors.rho_min_const;
+                    fflagl |= Floors::FFlag::FIXUP_RHO_DIRECT;
+                }
+                if (P(m_p.UU, k, j, i) < floors.u_min_const) {
+                    P(m_p.UU, k, j, i) = floors.u_min_const;
+                    fflagl |= Floors::FFlag::FIXUP_U_DIRECT;
+                }
+                fflag(0, k, j, i) = fflagl;
 
                 GRMHD::p_to_u(G, P, m_p, gam, k, j, i, U, m_u);
             }
