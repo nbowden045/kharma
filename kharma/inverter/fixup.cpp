@@ -166,8 +166,8 @@ TaskStatus Inverter::Backstop(MeshBlockData<Real> *rc)
 
     auto &pars = pmb->packages.Get("Inverter")->AllParams();
     const Real tol = pars.Get<Real>("err_tol");
-    const bool fix_recover_vel = pars.Get<bool>("fix_recover_vel");
-    const bool fix_recover_u = pars.Get<bool>("fix_recover_u");
+    const bool backstop_recover_vel = pars.Get<bool>("backstop_recover_vel");
+    const bool backstop_recover_u = pars.Get<bool>("backstop_recover_u");
 
     const Real gam = pmb->packages.Get("GRMHD")->Param<Real>("gamma");
 
@@ -228,7 +228,7 @@ TaskStatus Inverter::Backstop(MeshBlockData<Real> *rc)
                 // If we're below the at-rest energy (within tolerance),
                 // just bump it to that and kill all kinetic energy
                 if ((Trest[0] - U(m_u.UU, k, j, i)) / U(m_u.UU, k, j, i) > -tol ||
-                    (!fix_recover_vel && !fix_recover_u)) {
+                    (!backstop_recover_vel && !backstop_recover_u)) {
                     // W = 1
                     P(m_p.RHO, k, j, i) = D;
                     P(m_p.UU, k, j, i) = umin;
@@ -236,7 +236,7 @@ TaskStatus Inverter::Backstop(MeshBlockData<Real> *rc)
                     P(m_p.U2, k, j, i) = 0.;
                     P(m_p.U3, k, j, i) = 0.;
                     fflagl |= Floors::FFlag::FIXUP_ENERGY;
-                } else if (fix_recover_u) {
+                } else if (backstop_recover_u) {
                     // If the user really wants it, add the extra energy to the internal energy,
                     // preserving T00 by increasing u above umin
                     const Real uvec0[NVEC] = {0.};
