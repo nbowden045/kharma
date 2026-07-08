@@ -197,7 +197,7 @@ TaskStatus Inverter::Backstop(MeshBlockData<Real> *rc)
     const auto& G = pmb->coords;
 
     // Minimum internal energy to set here. Can be anything small
-    const Real umin = floors.u_min_const;
+    //const Real umin = floors.u_min_const;
     //const Real umin = 1e-15;
 
     // If after the first round of floors, we still reconstructed 
@@ -205,6 +205,9 @@ TaskStatus Inverter::Backstop(MeshBlockData<Real> *rc)
         KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
             // If the solve failed, because we reconstructed a
             // negative or zero internal energy (even after floors!)
+            Real rhomin_geom, umin_geom;
+            determine_geo_floors(G, P, m_p, gam, k, j, i, floors, floors_inner, rhomin_geom, umin_geom);
+            const Real umin = umin_geom;
             if (failed(pflag(k, j, i)) && (P(m_p.UU, k, j, i) < umin)) {
                 // const Real rho = P(m_p.RHO, k, j, i);
                 // const Real u = P(m_p.UU, k, j, i);

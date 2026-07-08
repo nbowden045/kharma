@@ -58,7 +58,10 @@ namespace Reductions {
 enum class Var{phi, bsq, gas_pressure, beta, rhou0, mix_T00, mix_T01, mix_T02, mix_T03,
                abs_rhou0, abs_mix_T00, abs_mix_T01, abs_mix_T02, abs_mix_T03,
                mdot, edot, ldot, mdot_flux, edot_flux, ldot_flux, eht_lum, jet_lum,
-               nan_ctop, zero_ctop, neg_rho, neg_u, neg_rhout};
+               nan_ctop, zero_ctop, neg_rho, neg_u, neg_rhout,
+               Uflux1RHO, Uflux1UU, Uflux1U1, Uflux1U2, Uflux1U3,
+               Uflux2RHO, Uflux2UU, Uflux2U1, Uflux2U2, Uflux2U3,
+               Uflux3RHO, Uflux3UU, Uflux3U1, Uflux3U2, Uflux3U3};
 
 // Function template for all reductions.
 template<Var T>
@@ -191,6 +194,87 @@ template <>
 KOKKOS_INLINE_FUNCTION Real reduction_var<Var::ldot_flux>(REDUCE_FUNCTION_ARGS)
 {
     return U.flux(X1DIR, m_u.U3, k, j, i);
+}
+
+// Fluxes of conserved fluid vars, X1
+template <>
+KOKKOS_INLINE_FUNCTION Real reduction_var<Var::Uflux1RHO>(REDUCE_FUNCTION_ARGS)
+{
+    return U.flux(X1DIR, m_u.RHO, k, j, i);
+}
+template <>
+KOKKOS_INLINE_FUNCTION Real reduction_var<Var::Uflux1UU>(REDUCE_FUNCTION_ARGS)
+{
+    return U.flux(X1DIR, m_u.UU, k, j, i);
+}
+template <>
+KOKKOS_INLINE_FUNCTION Real reduction_var<Var::Uflux1U1>(REDUCE_FUNCTION_ARGS)
+{
+    return U.flux(X1DIR, m_u.U1, k, j, i);
+}
+template <>
+KOKKOS_INLINE_FUNCTION Real reduction_var<Var::Uflux1U2>(REDUCE_FUNCTION_ARGS)
+{
+    return U.flux(X1DIR, m_u.U2, k, j, i);
+}
+template <>
+KOKKOS_INLINE_FUNCTION Real reduction_var<Var::Uflux1U3>(REDUCE_FUNCTION_ARGS)
+{
+    return U.flux(X1DIR, m_u.U3, k, j, i);
+}
+
+// Fluxes of conserved fluid vars, X2
+template <>
+KOKKOS_INLINE_FUNCTION Real reduction_var<Var::Uflux2RHO>(REDUCE_FUNCTION_ARGS)
+{
+    return U.flux(X2DIR, m_u.RHO, k, j, i);
+}
+template <>
+KOKKOS_INLINE_FUNCTION Real reduction_var<Var::Uflux2UU>(REDUCE_FUNCTION_ARGS)
+{
+    return U.flux(X2DIR, m_u.UU, k, j, i);
+}
+template <>
+KOKKOS_INLINE_FUNCTION Real reduction_var<Var::Uflux2U1>(REDUCE_FUNCTION_ARGS)
+{
+    return U.flux(X2DIR, m_u.U1, k, j, i);
+}
+template <>
+KOKKOS_INLINE_FUNCTION Real reduction_var<Var::Uflux2U2>(REDUCE_FUNCTION_ARGS)
+{
+    return U.flux(X2DIR, m_u.U2, k, j, i);
+}
+template <>
+KOKKOS_INLINE_FUNCTION Real reduction_var<Var::Uflux2U3>(REDUCE_FUNCTION_ARGS)
+{
+    return U.flux(X2DIR, m_u.U3, k, j, i);
+}
+
+// Fluxes of conserved fluid vars, X3
+template <>
+KOKKOS_INLINE_FUNCTION Real reduction_var<Var::Uflux3RHO>(REDUCE_FUNCTION_ARGS)
+{
+    return U.flux(X3DIR, m_u.RHO, k, j, i);
+}
+template <>
+KOKKOS_INLINE_FUNCTION Real reduction_var<Var::Uflux3UU>(REDUCE_FUNCTION_ARGS)
+{
+    return U.flux(X3DIR, m_u.UU, k, j, i);
+}
+template <>
+KOKKOS_INLINE_FUNCTION Real reduction_var<Var::Uflux3U1>(REDUCE_FUNCTION_ARGS)
+{
+    return U.flux(X3DIR, m_u.U1, k, j, i);
+}
+template <>
+KOKKOS_INLINE_FUNCTION Real reduction_var<Var::Uflux3U2>(REDUCE_FUNCTION_ARGS)
+{
+    return U.flux(X3DIR, m_u.U2, k, j, i);
+}
+template <>
+KOKKOS_INLINE_FUNCTION Real reduction_var<Var::Uflux3U3>(REDUCE_FUNCTION_ARGS)
+{
+    return U.flux(X3DIR, m_u.U3, k, j, i);
 }
 
 // Luminosity proxy from (for example) Porth et al 2019.

@@ -38,6 +38,7 @@
 #include "flux_functions.hpp"
 #include "grmhd_functions.hpp"
 #include "types.hpp"
+#include <cmath>
 
 namespace Reductions {
 
@@ -58,21 +59,34 @@ std::shared_ptr<KHARMAPackage> Initialize(ParameterInput *pin, std::shared_ptr<P
  * Just set equal min/max, 2D slices are detected
  */
 template<Var var, UserHistoryOperation op, typename T>
-T DomainReduction(MeshData<Real> *md, const GReal startx[3], const GReal stopx[3], int channel=-1);
+T DomainReduction(MeshData<Real> *md, const GReal startx[3], const GReal stopx[3], int channel=-1, bool plane_outward=false);
 // Defaults -- use numeric limits to set some indices unrestricted
 static constexpr Real real_max = std::numeric_limits<GReal>::max();
 template<Var var, UserHistoryOperation op, typename T>
-T DomainReduction(MeshData<Real> *md, int channel=-1) {
+T DomainReduction(MeshData<Real> *md, int channel=-1, bool plane_outward=false) {
     const GReal startx[3] = {-real_max, -real_max, -real_max};
     const GReal stopx[3] = {real_max, real_max, real_max};
-    return DomainReduction<var, op, T>(md, startx, stopx, channel);
+    return DomainReduction<var, op, T>(md, startx, stopx, channel, plane_outward);
 }
 template<Var var, UserHistoryOperation op, typename T>
-T ShellReduction(MeshData<Real> *md, GReal r, int channel=-1) {
+T ShellReduction(MeshData<Real> *md, GReal r, int channel=-1, bool plane_outward=false) {
     const GReal startx[3] = {r, -real_max, -real_max};
     const GReal stopx[3] = {r, real_max, real_max};
-    return DomainReduction<var, op, T>(md, startx, stopx, channel);
+    return DomainReduction<var, op, T>(md, startx, stopx, channel, plane_outward);
 }
+template<Var var, UserHistoryOperation op, typename T>
+T ConeReduction(MeshData<Real> *md, GReal th, int channel=-1, bool plane_outward=false) {
+    const GReal startx[3] = {-real_max, th, -real_max};
+    const GReal stopx[3] = {-real_max, th, real_max};
+    return DomainReduction<var, op, T>(md, startx, stopx, channel, plane_outward);
+}
+template<Var var, UserHistoryOperation op, typename T>
+T PlaneReduction(MeshData<Real> *md, GReal phi, int channel=-1, bool plane_outward=false) {
+    const GReal startx[3] = {-real_max, -real_max, phi};
+    const GReal stopx[3] = {-real_max, real_max, phi};
+    return DomainReduction<var, op, T>(md, startx, stopx, channel, plane_outward);
+}
+// TODO(CEP) alternate names for XYZ?  Or just don't bother
 
 // Parthenon doesn't allow taking options, so we define some common reductions
 template<Var var>
@@ -96,6 +110,41 @@ template<Var var>
 Real Total(MeshData<Real> *md)
 {
     return Reductions::DomainReduction<var, UserHistoryOperation::sum, Real>(md);
+}
+
+// Values gained/lost through faces
+// TODO(CEP) SPHERICAL ONLY RIGHT NOW
+template<Var var>
+Real SumInnerX1(MeshData<Real> *md)
+{
+    return Reductions::ShellReduction<var, UserHistoryOperation::sum, Real>(md,
+        md->GetMeshPointer()->packages.Get("Reductions")->Param<GReal>("domain_r_in"), -1, false);
+}
+template<Var var>
+Real SumOuterX1(MeshData<Real> *md)
+{
+    return Reductions::ShellReduction<var, UserHistoryOperation::sum, Real>(md,
+        md->GetMeshPointer()->packages.Get("Reductions")->Param<GReal>("domain_r_out"), -1, true);
+}
+template<Var var>
+Real SumInnerX2(MeshData<Real> *md)
+{
+    return Reductions::ConeReduction<var, UserHistoryOperation::sum, Real>(md, 0., -1, false);
+}
+template<Var var>
+Real SumOuterX2(MeshData<Real> *md)
+{
+    return Reductions::ConeReduction<var, UserHistoryOperation::sum, Real>(md, M_PI, -1, true);
+}
+template<Var var>
+Real SumInnerX3(MeshData<Real> *md)
+{
+    return Reductions::PlaneReduction<var, UserHistoryOperation::sum, Real>(md, 0., -1, false);
+}
+template<Var var>
+Real SumOuterX3(MeshData<Real> *md)
+{
+    return Reductions::PlaneReduction<var, UserHistoryOperation::sum, Real>(md, M_2_PI, -1, true);
 }
 
 /**

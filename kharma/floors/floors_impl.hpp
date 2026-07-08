@@ -111,13 +111,13 @@ TaskStatus ApplyFloorsInFrame(MeshData<Real> *md, IndexDomain domain)
                                         U(b), m_u);
                 }
 
-                // Record the pflag if we applied normal floors
+                // Record the pflag if we applied normal floors -- successful or not
                 if (pflag_l >= 0) pflag(b, 0, k, j, i) = pflag_l;
 
                 // Apply ceilings *after* floors, to make the temperature ceiling better-behaved
                 apply_ceilings(G, P(b), m_p, gam, k, j, i, floors, floors_inner, U(b), m_u);
 
-                // P->U *if we inverted correctly* (or didn't invert)
+                // P->U if we inverted *correctly* (or didn't invert)
                 if (pflag_l <= 0)
                     Flux::p_to_u_mhd(G, P(b), m_p, emhd_params, gam, k, j, i, U(b), m_u, Loci::center);
             }

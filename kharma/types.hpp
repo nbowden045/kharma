@@ -70,8 +70,9 @@ constexpr TE E2 = TE::E2;
 constexpr TE E3 = TE::E3;
 constexpr TE NN = TE::NN;
 
-// Any basic type manips, see LocOf in decs etc etc
+// Any basic type manips, see loc_of in decs etc etc
 // Host-only because the templating/types are weird on device
+// TODO(CEP) make host/device?
 template<typename T>
 inline TE FaceOf(const T& dir) {
     return (dir == X1DIR) ? F1 : ((dir == X2DIR) ? F2 : F3);

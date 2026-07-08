@@ -506,4 +506,36 @@ KOKKOS_INLINE_FUNCTION int apply_geo_floors(const GRCoordinates& G, Global& P, c
     return fflag;
 }
 
+template<typename Global>
+KOKKOS_INLINE_FUNCTION int determine_geo_floors(const GRCoordinates& G, Global& P, const VarMap& m,
+                                            const Real& gam, const int& k, const int& j, const int& i,
+                                            const Floors::Prescription& floors, const Floors::Prescription& floors_inner,
+                                            Real& rhoflr_geom, Real& uflr_geom,
+                                            const Loci loc=Loci::center)
+{
+    // Choose our floor scheme
+    const Floors::Prescription& myfloors = (floors.radius_dependent_floors
+                                            && G.r(0, j, i) < floors.floors_switch_r) ? floors_inner : floors;
+
+    // Apply only the geometric floors
+    if(G.coords.is_spherical()) {
+        const GReal r = G.r(0, j, i);
+        // r_char sets more aggressive floor close to EH but backs off
+        Real rhoscal = (myfloors.use_r_char) ? 1. / ((r*r) * (1 + r / myfloors.r_char)) : 1. / m::sqrt(r*r*r);
+        rhoflr_geom = m::max(myfloors.rho_min_geom * rhoscal, myfloors.rho_min_const);
+        uflr_geom   = m::max(myfloors.u_min_geom * m::pow(rhoscal, gam), myfloors.u_min_const);
+    } else {
+        rhoflr_geom = myfloors.rho_min_const;
+        uflr_geom   = myfloors.u_min_const;
+    }
+
+    // TODO(CEP) really needed?  Not used in the only call
+    int fflag = 0;
+    // Record all the floors that were hit, using bitflags
+    // Record Geometric floor hits
+    fflag |= (rhoflr_geom > P(m.RHO, k, j, i)) * FFlag::GEOM_RHO_FLUX;
+    fflag |= (uflr_geom > P(m.UU, k, j, i)) * FFlag::GEOM_U_FLUX;
+    return fflag;
+}
+
 } // Floors
