@@ -176,7 +176,8 @@ T Reductions::DomainReduction(MeshData<Real> *md, const GReal startx[3], const G
                 G.coord_embed(k, j, i, Loci::center, x);
                 if (trivial1 || trivial2 || trivial3) {
                     if (plane_outward) {
-                        G.coord_embed(k + trivial3, j + trivial2, i + trivial1, Loci::center, xin);
+                        G.coord_embed(k, j, i, Loci::center, xin);
+                        G.coord_embed(k + trivial3, j + trivial2, i + trivial1, Loci::center, x);
                     } else {
                         G.coord_embed(k - trivial3, j - trivial2, i - trivial1, Loci::center, xin);
                     }
@@ -199,7 +200,8 @@ T Reductions::DomainReduction(MeshData<Real> *md, const GReal startx[3], const G
                 G.coord_embed(k, j, i, Loci::center, x);
                 if (trivial1 || trivial2 || trivial3) {
                     if (plane_outward) {
-                        G.coord_embed(k + trivial3, j + trivial2, i + trivial1, Loci::center, xin);
+                        G.coord_embed(k, j, i, Loci::center, xin);
+                        G.coord_embed(k + trivial3, j + trivial2, i + trivial1, Loci::center, x);
                     } else {
                         G.coord_embed(k - trivial3, j - trivial2, i - trivial1, Loci::center, xin);
                     }
@@ -223,7 +225,8 @@ T Reductions::DomainReduction(MeshData<Real> *md, const GReal startx[3], const G
                 G.coord_embed(k, j, i, Loci::center, x);
                 if (trivial1 || trivial2 || trivial3) {
                     if (plane_outward) {
-                        G.coord_embed(k + trivial3, j + trivial2, i + trivial1, Loci::center, xin);
+                        G.coord_embed(k, j, i, Loci::center, xin);
+                        G.coord_embed(k + trivial3, j + trivial2, i + trivial1, Loci::center, x);
                     } else {
                         G.coord_embed(k - trivial3, j - trivial2, i - trivial1, Loci::center, xin);
                     }
