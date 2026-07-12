@@ -97,6 +97,7 @@ std::shared_ptr<KHARMAPackage> Inverter::Initialize(ParameterInput *pin, std::sh
     // stealing some or all KE and adding any shortfall
     bool backstop = pin->GetOrAddBoolean("inverter", "backstop", use_kastaun);
     params.Add("backstop", backstop);
+    // Note these aren't called if the backstop isn't enabled!
     bool backstop_recover_vel = pin->GetOrAddBoolean("inverter", "backstop_recover_vel", true);
     params.Add("backstop_recover_vel", backstop_recover_vel);
     bool backstop_recover_u = pin->GetOrAddBoolean("inverter", "backstop_recover_u", false);
