@@ -283,6 +283,12 @@ TaskStatus ApplyInitialFloors(ParameterInput *pin, MeshBlockData<Real> *mbd, Ind
 int CountFFlags(MeshData<Real> *md);
 
 /**
+ * Record any changes in conserved variables since the application of flux divergence + geometric sources
+ * Intended as a way to track *all* changes (floors, fixups, boundaries, etc.)
+ */
+TaskStatus TrackAdditions(MeshData<Real> *md, MeshData<Real> *md_save);
+
+/**
  * Print a summary of floors which were hit
  */
 TaskStatus PostStepDiagnostics(const SimTime& tm, MeshData<Real> *md);

@@ -120,9 +120,17 @@ std::shared_ptr<KHARMAPackage> Floors::Initialize(ParameterInput *pin, std::shar
     else
         params.Add("prescription_inner", MakePrescriptionInner(pin, MakePrescription(pin)), "floors");
 
+    // All of these are now the same option: disable the *call* only.
+    // This lets us assume that the floors package is loaded, which is convenient many places
+    bool floors_on_default = !pin->GetOrAddBoolean("floors", "disable_floors", false);
+    bool floors_on = pin->GetOrAddBoolean("floors", "on", floors_on_default);
     // Sometimes we want the floors package, but don't want to apply anything, for tests
-    bool disable_call = pin->GetOrAddBoolean("floors", "disable_call", false);
+    bool disable_call = pin->GetOrAddBoolean("floors", "disable_call", !floors_on);
     params.Add("disable_call", disable_call);
+
+    // Track all conserved variable changes not produced by fluxes
+    bool track_additions = pin->GetOrAddBoolean("floors", "track_additions", false);
+    params.Add("track_additions", track_additions);
 
     // These preserve floor values between the "mark" pass and the actual floor application
     // We need them even if floors are disabled, to apply initial values based on some prescription
@@ -137,6 +145,16 @@ std::shared_ptr<KHARMAPackage> Floors::Initialize(ParameterInput *pin, std::shar
     // When not using UtoP, we still need a "dummy" copy of pflag to write the post-flooring flag to
     m = Metadata({Metadata::Real, Metadata::Cell, Metadata::Derived, Metadata::OneCopy, Metadata::Overridable});
     pkg->AddField("pflag", m);
+
+    if (track_additions) {
+        // Track total additions to conserved variables
+        // TODO add primitive versions, advect as passives
+        pkg->AddField("Floors.rhou0add", m);
+        std::vector<int> s_4v({4});
+        m = Metadata({Metadata::Real, Metadata::Cell, Metadata::Derived, Metadata::OneCopy}, s_4v);
+        pkg->AddField("Floors.Tadd", m);
+        // TODO(CEP) Maybe also want Floors.floorUadd, etc etc, for understanding the breakdown...
+    }
 
     // Don't actually call the usual floor function if we're using normal frame w/Kastaun,
     // floors will be applied during the inversion call.
@@ -283,6 +301,32 @@ TaskStatus Floors::ApplyGRMHDFloors(MeshData<Real> *md, IndexDomain domain)
     } else {
         throw std::invalid_argument("Floors for requested frame not implemented!");
     }
+}
+
+TaskStatus Floors::TrackAdditions(MeshData<Real> *md, MeshData<Real> *md_save)
+{
+    Kokkos::Profiling::pushRegion("Task_TrackAdditions");
+    PackIndexMap cons_map, tracks_map;
+    const auto &U = md->PackVariables(std::vector<MetadataFlag>{Metadata::Conserved}, cons_map);
+    const auto &U_save = md_save->PackVariables(std::vector<MetadataFlag>{Metadata::Conserved});
+    const VarMap m_u(cons_map, true);
+
+    const auto &tU = md->PackVariables(std::vector<std::string>{"Floors.rhou0add","Floors.Tadd"}, tracks_map);
+    const int rhou0i = tracks_map["Floors.rhou0add"].first;
+    const int Ti = tracks_map["Floors.Tadd"].first;
+
+    parthenon::par_for(
+        DEFAULT_LOOP_PATTERN, "TrackAdditions", DevExecSpace(), 0, U.GetDim(5) - 1, 
+            0, U.GetDim(3) - 1, 0, U.GetDim(2) - 1, 0, U.GetDim(1) - 1,
+        KOKKOS_LAMBDA(const int b, const int k, const int j, const int i) {
+            tU(b, rhou0i, k, j, i) = U(b, m_u.RHO, k, j, i) - U_save(b, m_u.RHO, k, j, i);
+            tU(b, Ti+0, k, j, i) = U(b, m_u.UU, k, j, i) - U_save(b, m_u.UU, k, j, i);
+            tU(b, Ti+1, k, j, i) = U(b, m_u.U1, k, j, i) - U_save(b, m_u.U1, k, j, i);
+            tU(b, Ti+2, k, j, i) = U(b, m_u.U2, k, j, i) - U_save(b, m_u.U2, k, j, i);
+            tU(b, Ti+3, k, j, i) = U(b, m_u.U3, k, j, i) - U_save(b, m_u.U3, k, j, i);
+        });
+    Kokkos::Profiling::popRegion(); // Task_WeightedSumDataFace
+    return TaskStatus::complete;
 }
 
 TaskStatus Floors::PostStepDiagnostics(const SimTime& tm, MeshData<Real> *md)

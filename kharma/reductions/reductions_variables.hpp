@@ -315,7 +315,8 @@ KOKKOS_INLINE_FUNCTION Real reduction_var<Var::zero_ctop>(REDUCE_FUNCTION_ARGS)
 {
     Real is_zero = 0;
     VLOOP {
-        if(m::max(cmax(v, k, j, i), cmin(v, k, j, i)) <= 0.) {
+        if (m::max(cmax(v, k, j, i), cmin(v, k, j, i)) <= 0.
+            && cmax.GetDim(v + 1) != 1) {
             is_zero = 1.; // once per zone
 #if DEBUG
 #ifndef KOKKOS_ENABLE_SYCL
@@ -332,7 +333,8 @@ KOKKOS_INLINE_FUNCTION Real reduction_var<Var::nan_ctop>(REDUCE_FUNCTION_ARGS)
 {
     Real is_nan = 0.;
     VLOOP {
-        if(m::isnan(m::max(cmax(v, k, j, i), cmin(v, k, j, i)))) {
+        if (m::isnan(m::max(cmax(v, k, j, i), cmin(v, k, j, i)))
+            && cmax.GetDim(v + 1) != 1) {
             is_nan = 1.;
 #if DEBUG
 #ifndef KOKKOS_ENABLE_SYCL
