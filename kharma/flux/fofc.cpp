@@ -55,7 +55,7 @@ TaskStatus Flux::MarkFOFC(MeshData<Real> *guess)
 
     PackIndexMap cons_map, prims_map;
     std::vector<MetadataFlag> prims_flags = {Metadata::GetUserFlag("Primitive"), Metadata::Cell};
-    std::vector<MetadataFlag> cons_flags = {Metadata::Conserved, Metadata::Cell};
+    std::vector<MetadataFlag> cons_flags = {Metadata::WithFluxes, Metadata::Cell};
     const auto& P = guess->PackVariables(prims_flags, prims_map);
     const auto& U = guess->PackVariablesAndFluxes(cons_flags, cons_map);
     const VarMap m_u(cons_map, true), m_p(prims_map, false);
@@ -163,7 +163,7 @@ TaskStatus Flux::FOFC(MeshData<Real> *md, MeshData<Real> *guess)
     // It will be filled according to m_u/cons_map, which does not contain B
     PackIndexMap cons_map, prims_map;
     std::vector<MetadataFlag> prims_flags = {Metadata::GetUserFlag("Primitive"), Metadata::Cell};
-    std::vector<MetadataFlag> cons_flags = {Metadata::Conserved, Metadata::Cell};
+    std::vector<MetadataFlag> cons_flags = {Metadata::WithFluxes, Metadata::Cell};
     const auto& P_all = md->PackVariables(prims_flags, prims_map);
     const auto& U_all = md->PackVariablesAndFluxes(cons_flags, cons_map);
     const VarMap m_u(cons_map, true), m_p(prims_map, false);

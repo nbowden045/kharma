@@ -117,34 +117,66 @@ Real Total(MeshData<Real> *md)
 template<Var var>
 Real SumInnerX1(MeshData<Real> *md)
 {
-    return Reductions::ShellReduction<var, UserHistoryOperation::sum, Real>(md,
-        md->GetMeshPointer()->packages.Get("Reductions")->Param<GReal>("domain_r_in"), -1, false);
+    auto pmesh = md->GetMeshPointer();
+    auto x1min = pmesh->mesh_size.xmin(X1DIR);
+    Real Xnative[GR_DIM] = {0., x1min, 0., 0.}, Xembed[GR_DIM] = {0.};
+    pmesh->block_list[0]->coords.coords.coord_to_embed(Xnative, Xembed);
+
+    return Reductions::ShellReduction<var, UserHistoryOperation::sum, Real>(md, Xembed[1], -1, false);
 }
 template<Var var>
 Real SumOuterX1(MeshData<Real> *md)
 {
-    return Reductions::ShellReduction<var, UserHistoryOperation::sum, Real>(md,
-        md->GetMeshPointer()->packages.Get("Reductions")->Param<GReal>("domain_r_out"), -1, true);
+    auto pmesh = md->GetMeshPointer();
+    auto x1max = pmesh->mesh_size.xmax(X1DIR);
+    Real Xnative[GR_DIM] = {0., x1max, 0., 0.}, Xembed[GR_DIM] = {0.};
+    pmesh->block_list[0]->coords.coords.coord_to_embed(Xnative, Xembed);
+
+    return Reductions::ShellReduction<var, UserHistoryOperation::sum, Real>(md, Xembed[1], -1, true);
 }
 template<Var var>
 Real SumInnerX2(MeshData<Real> *md)
 {
-    return Reductions::ConeReduction<var, UserHistoryOperation::sum, Real>(md, 0., -1, false);
+    auto pmesh = md->GetMeshPointer();
+    auto x1max = pmesh->mesh_size.xmax(X1DIR);
+    auto x2min = pmesh->mesh_size.xmin(X2DIR);
+    Real Xnative[GR_DIM] = {0., x1max, x2min, 0.}, Xembed[GR_DIM] = {0.};
+    pmesh->block_list[0]->coords.coords.coord_to_embed(Xnative, Xembed);
+
+    return Reductions::ConeReduction<var, UserHistoryOperation::sum, Real>(md, Xembed[2], -1, false);
 }
 template<Var var>
 Real SumOuterX2(MeshData<Real> *md)
 {
-    return Reductions::ConeReduction<var, UserHistoryOperation::sum, Real>(md, M_PI, -1, true);
+    auto pmesh = md->GetMeshPointer();
+    auto x1max = pmesh->mesh_size.xmax(X1DIR);
+    auto x2max = pmesh->mesh_size.xmax(X2DIR);
+    Real Xnative[GR_DIM] = {0., x1max, x2max, 0.}, Xembed[GR_DIM] = {0.};
+    pmesh->block_list[0]->coords.coords.coord_to_embed(Xnative, Xembed);
+
+    return Reductions::ConeReduction<var, UserHistoryOperation::sum, Real>(md, Xembed[2], -1, true);
 }
 template<Var var>
 Real SumInnerX3(MeshData<Real> *md)
 {
-    return Reductions::PlaneReduction<var, UserHistoryOperation::sum, Real>(md, 0., -1, false);
+    auto pmesh = md->GetMeshPointer();
+    auto x1max = pmesh->mesh_size.xmax(X1DIR);
+    auto x3min = pmesh->mesh_size.xmin(X3DIR);
+    Real Xnative[GR_DIM] = {0., x1max, 0., x3min}, Xembed[GR_DIM] = {0.};
+    pmesh->block_list[0]->coords.coords.coord_to_embed(Xnative, Xembed);
+
+    return Reductions::PlaneReduction<var, UserHistoryOperation::sum, Real>(md, Xembed[3], -1, false);
 }
 template<Var var>
 Real SumOuterX3(MeshData<Real> *md)
 {
-    return Reductions::PlaneReduction<var, UserHistoryOperation::sum, Real>(md, M_2_PI, -1, true);
+    auto pmesh = md->GetMeshPointer();
+    auto x1max = pmesh->mesh_size.xmax(X1DIR);
+    auto x3max = pmesh->mesh_size.xmax(X3DIR);
+    Real Xnative[GR_DIM] = {0., x1max, 0., x3max}, Xembed[GR_DIM] = {0.};
+    pmesh->block_list[0]->coords.coords.coord_to_embed(Xnative, Xembed);
+
+    return Reductions::PlaneReduction<var, UserHistoryOperation::sum, Real>(md, Xembed[3], -1, true);
 }
 
 /**

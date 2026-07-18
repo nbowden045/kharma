@@ -61,7 +61,10 @@ enum class Var{phi, bsq, gas_pressure, beta, rhou0, mix_T00, mix_T01, mix_T02, m
                nan_ctop, zero_ctop, neg_rho, neg_u, neg_rhout,
                Uflux1RHO, Uflux1UU, Uflux1U1, Uflux1U2, Uflux1U3,
                Uflux2RHO, Uflux2UU, Uflux2U1, Uflux2U2, Uflux2U3,
-               Uflux3RHO, Uflux3UU, Uflux3U1, Uflux3U2, Uflux3U3};
+               Uflux3RHO, Uflux3UU, Uflux3U1, Uflux3U2, Uflux3U3,
+               rhou0add, T00add, T01add, T02add, T03add,
+               rhou0sub, T00sub, T01sub, T02sub, T03sub,
+               rhou0change, T00change, T01change, T02change, T03change};
 
 // Function template for all reductions.
 template<Var T>
@@ -194,6 +197,85 @@ template <>
 KOKKOS_INLINE_FUNCTION Real reduction_var<Var::ldot_flux>(REDUCE_FUNCTION_ARGS)
 {
     return U.flux(X1DIR, m_u.U3, k, j, i);
+}
+
+// Amount of conserved fluid vars added to grid/subtracted from grid
+template <>
+KOKKOS_INLINE_FUNCTION Real reduction_var<Var::rhou0add>(REDUCE_FUNCTION_ARGS)
+{
+    return U(m_u.RHOADD, k, j, i) > 0. ? U(m_u.RHOADD, k, j, i) : 0.;
+}
+template <>
+KOKKOS_INLINE_FUNCTION Real reduction_var<Var::T00add>(REDUCE_FUNCTION_ARGS)
+{
+    return U(m_u.T0ADD, k, j, i) > 0. ? U(m_u.T0ADD, k, j, i) : 0.;
+}
+template <>
+KOKKOS_INLINE_FUNCTION Real reduction_var<Var::T01add>(REDUCE_FUNCTION_ARGS)
+{
+    return U(m_u.T1ADD, k, j, i) > 0. ? U(m_u.T1ADD, k, j, i) : 0.;
+}
+template <>
+KOKKOS_INLINE_FUNCTION Real reduction_var<Var::T02add>(REDUCE_FUNCTION_ARGS)
+{
+    return U(m_u.T2ADD, k, j, i) > 0. ? U(m_u.T2ADD, k, j, i) : 0.;
+}
+template <>
+KOKKOS_INLINE_FUNCTION Real reduction_var<Var::T03add>(REDUCE_FUNCTION_ARGS)
+{
+    return U(m_u.T3ADD, k, j, i) > 0. ? U(m_u.T3ADD, k, j, i) : 0.;
+}
+
+template <>
+KOKKOS_INLINE_FUNCTION Real reduction_var<Var::rhou0sub>(REDUCE_FUNCTION_ARGS)
+{
+    return U(m_u.RHOADD, k, j, i) < 0. ? U(m_u.RHOADD, k, j, i) : 0.;
+}
+template <>
+KOKKOS_INLINE_FUNCTION Real reduction_var<Var::T00sub>(REDUCE_FUNCTION_ARGS)
+{
+    return U(m_u.T0ADD, k, j, i) < 0. ? U(m_u.T0ADD, k, j, i) : 0.;
+}
+template <>
+KOKKOS_INLINE_FUNCTION Real reduction_var<Var::T01sub>(REDUCE_FUNCTION_ARGS)
+{
+    return U(m_u.T1ADD, k, j, i) < 0. ? U(m_u.T1ADD, k, j, i) : 0.;
+}
+template <>
+KOKKOS_INLINE_FUNCTION Real reduction_var<Var::T02sub>(REDUCE_FUNCTION_ARGS)
+{
+    return U(m_u.T2ADD, k, j, i) < 0. ? U(m_u.T2ADD, k, j, i) : 0.;
+}
+template <>
+KOKKOS_INLINE_FUNCTION Real reduction_var<Var::T03sub>(REDUCE_FUNCTION_ARGS)
+{
+    return U(m_u.T3ADD, k, j, i) < 0. ? U(m_u.T3ADD, k, j, i) : 0.;
+}
+// Total change as a check
+template <>
+KOKKOS_INLINE_FUNCTION Real reduction_var<Var::rhou0change>(REDUCE_FUNCTION_ARGS)
+{
+    return U(m_u.RHOADD, k, j, i);
+}
+template <>
+KOKKOS_INLINE_FUNCTION Real reduction_var<Var::T00change>(REDUCE_FUNCTION_ARGS)
+{
+    return U(m_u.T0ADD, k, j, i);
+}
+template <>
+KOKKOS_INLINE_FUNCTION Real reduction_var<Var::T01change>(REDUCE_FUNCTION_ARGS)
+{
+    return U(m_u.T1ADD, k, j, i);
+}
+template <>
+KOKKOS_INLINE_FUNCTION Real reduction_var<Var::T02change>(REDUCE_FUNCTION_ARGS)
+{
+    return U(m_u.T2ADD, k, j, i);
+}
+template <>
+KOKKOS_INLINE_FUNCTION Real reduction_var<Var::T03change>(REDUCE_FUNCTION_ARGS)
+{
+    return U(m_u.T3ADD, k, j, i);
 }
 
 // Fluxes of conserved fluid vars, X1

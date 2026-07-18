@@ -149,9 +149,10 @@ std::shared_ptr<KHARMAPackage> Floors::Initialize(ParameterInput *pin, std::shar
     if (track_additions) {
         // Track total additions to conserved variables
         // TODO add primitive versions, advect as passives
+        m = Metadata({Metadata::Real, Metadata::Cell, Metadata::Derived, Metadata::Conserved});
         pkg->AddField("Floors.rhou0add", m);
         std::vector<int> s_4v({4});
-        m = Metadata({Metadata::Real, Metadata::Cell, Metadata::Derived, Metadata::OneCopy}, s_4v);
+        m = Metadata({Metadata::Real, Metadata::Cell, Metadata::Derived, Metadata::Conserved}, s_4v);
         pkg->AddField("Floors.Tadd", m);
         // TODO(CEP) Maybe also want Floors.floorUadd, etc etc, for understanding the breakdown...
     }
@@ -172,6 +173,19 @@ std::shared_ptr<KHARMAPackage> Floors::Initialize(ParameterInput *pin, std::shar
     hst_vars.emplace_back(parthenon::HistoryOutputVar(UserHistoryOperation::sum, CountFFlags, "FFlags"));
     // TODO Domain::entire version?
     // TODO entries for each individual flag?
+    if (track_additions) {
+        hst_vars.emplace_back(parthenon::HistoryOutputVar(UserHistoryOperation::sum, Reductions::Total<Reductions::Var::rhou0add>, "rhou0add"));
+        hst_vars.emplace_back(parthenon::HistoryOutputVar(UserHistoryOperation::sum, Reductions::Total<Reductions::Var::T00add>, "T00add"));
+        hst_vars.emplace_back(parthenon::HistoryOutputVar(UserHistoryOperation::sum, Reductions::Total<Reductions::Var::T01add>, "T01add"));
+        hst_vars.emplace_back(parthenon::HistoryOutputVar(UserHistoryOperation::sum, Reductions::Total<Reductions::Var::T02add>, "T02add"));
+        hst_vars.emplace_back(parthenon::HistoryOutputVar(UserHistoryOperation::sum, Reductions::Total<Reductions::Var::T03add>, "T03add"));
+
+        hst_vars.emplace_back(parthenon::HistoryOutputVar(UserHistoryOperation::sum, Reductions::Total<Reductions::Var::rhou0sub>, "rhou0sub"));
+        hst_vars.emplace_back(parthenon::HistoryOutputVar(UserHistoryOperation::sum, Reductions::Total<Reductions::Var::T00sub>, "T00sub"));
+        hst_vars.emplace_back(parthenon::HistoryOutputVar(UserHistoryOperation::sum, Reductions::Total<Reductions::Var::T01sub>, "T01sub"));
+        hst_vars.emplace_back(parthenon::HistoryOutputVar(UserHistoryOperation::sum, Reductions::Total<Reductions::Var::T02sub>, "T02sub"));
+        hst_vars.emplace_back(parthenon::HistoryOutputVar(UserHistoryOperation::sum, Reductions::Total<Reductions::Var::T03sub>, "T03sub"));
+    }
     // add callbacks for HST output to the Params struct, identified by the `hist_param_key`
     pkg->AddParam<>(parthenon::hist_param_key, hst_vars);
 
@@ -325,7 +339,7 @@ TaskStatus Floors::TrackAdditions(MeshData<Real> *md, MeshData<Real> *md_save)
             tU(b, Ti+2, k, j, i) = U(b, m_u.U2, k, j, i) - U_save(b, m_u.U2, k, j, i);
             tU(b, Ti+3, k, j, i) = U(b, m_u.U3, k, j, i) - U_save(b, m_u.U3, k, j, i);
         });
-    Kokkos::Profiling::popRegion(); // Task_WeightedSumDataFace
+    Kokkos::Profiling::popRegion(); // Task_TrackAdditions
     return TaskStatus::complete;
 }
 
