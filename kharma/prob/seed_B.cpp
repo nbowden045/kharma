@@ -225,6 +225,7 @@ TaskStatus SeedBFieldType(MeshBlockData<Real> *rc, ParameterInput *pin, IndexDom
         case BSeedType::sane:
         case BSeedType::mad:
         case BSeedType::mad_quadrupole:
+        case BSeedType::mcaf:
         case BSeedType::r3s3:
         case BSeedType::r5s5:
         case BSeedType::gaussian:
@@ -435,6 +436,8 @@ TaskStatus SeedBField(MeshData<Real> *md, ParameterInput *pin)
             status = SeedBFieldType<BSeedType::mad>(rc, pin);
         } else if (b_field_type == "mad_quadrupole") {
             status = SeedBFieldType<BSeedType::mad_quadrupole>(rc, pin);
+        } else if (b_field_type == "mcaf") {
+            status = SeedBFieldType<BSeedType::mcaf>(rc, pin);
         } else if (b_field_type == "r3s3") {
             status = SeedBFieldType<BSeedType::r3s3>(rc, pin);
         } else if (b_field_type == "steep" || b_field_type == "r5s5") {

@@ -52,7 +52,7 @@ TaskStatus NormalizeBField(MeshData<Real> *md, ParameterInput *pin);
 
 // Internal representation of the field initialization preference, used for templating
 enum BSeedType{constant, monopole, orszag_tang, orszag_tang_a, wave, shock_tube,
-                sane, mad, mad_quadrupole, r3s3, r5s5, gaussian, bz_monopole,
+                sane, mad, mad_quadrupole, mcaf, r3s3, r5s5, gaussian, bz_monopole,
                 split_monopole, split_monopole_const, vertical, r1s2};
 
 #define SEEDA_ARGS GReal *x, const GReal *dxc, double rho, double rin, double min_A, double A0, double arg1, double rb
@@ -98,6 +98,15 @@ KOKKOS_INLINE_FUNCTION Real seed_a<BSeedType::mad_quadrupole>(SEEDA_ARGS)
 {
     return m::max(pow(x[1] / rin, 3) * m::pow(sin(x[2]), 3) *
             m::exp(-x[1] / 400) * rho - min_A, 0.) * m::cos(x[2]);
+}
+
+// Magnetically "choked" from McKinney+2012 (when paired with 10/100 torus)
+// Just an r^2 sin^2 th term, but cut off subtly differently
+// Also technically should be pegged to u, not rho
+template<>
+KOKKOS_INLINE_FUNCTION Real seed_a<BSeedType::mcaf>(SEEDA_ARGS)
+{
+    return m::max(m::pow(x[1] / rin, 2) * m::pow(m::sin(x[2]), 2) * (rho - min_A), 0.);
 }
 
 // Just the r^3 sin^3 th term
