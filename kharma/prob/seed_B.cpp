@@ -227,6 +227,7 @@ TaskStatus SeedBFieldType(MeshBlockData<Real> *rc, ParameterInput *pin, IndexDom
         case BSeedType::mad_quadrupole:
         case BSeedType::mcaf:
         case BSeedType::r3s3:
+        case BSeedType::r3s3_min_rho:
         case BSeedType::r5s5:
         case BSeedType::gaussian:
             // Torus parameters
@@ -423,7 +424,6 @@ TaskStatus SeedBField(MeshData<Real> *md, ParameterInput *pin)
         // I could make this a map or something,
         // but this is the only place I decode it.
         // TODO could also save it to a package...
-        // TODO accumulate TaskStatus properly?
         if (b_field_type == "constant") {
             status = SeedBFieldType<BSeedType::constant>(rc, pin);
         } else if (b_field_type == "monopole") {
@@ -440,6 +440,8 @@ TaskStatus SeedBField(MeshData<Real> *md, ParameterInput *pin)
             status = SeedBFieldType<BSeedType::mcaf>(rc, pin);
         } else if (b_field_type == "r3s3") {
             status = SeedBFieldType<BSeedType::r3s3>(rc, pin);
+        } else if (b_field_type == "r3s3_min_rho") {
+            status = SeedBFieldType<BSeedType::r3s3_min_rho>(rc, pin);
         } else if (b_field_type == "steep" || b_field_type == "r5s5") {
             status = SeedBFieldType<BSeedType::r5s5>(rc, pin);
         } else if (b_field_type == "gaussian") {
