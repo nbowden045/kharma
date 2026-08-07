@@ -40,20 +40,23 @@
 #include "flux.hpp"
 #include "reductions.hpp"
 
-int Inverter::CountPFlags(MeshData<Real> *md)
+int Inverter::CountPFlags(MeshData<Real>* md)
 {
-    return Reductions::CountFlags(md, "pflag", Inverter::status_names, IndexDomain::interior, false)[0];
+    return Reductions::CountFlags(
+        md, "pflag", Inverter::status_names, IndexDomain::interior, false)[0];
 }
 
-std::shared_ptr<KHARMAPackage> Inverter::Initialize(ParameterInput *pin, std::shared_ptr<Packages_t>& packages)
+std::shared_ptr<KHARMAPackage> Inverter::Initialize(
+    ParameterInput* pin, std::shared_ptr<Packages_t>& packages)
 {
     auto pkg = std::make_shared<KHARMAPackage>("Inverter");
-    Params &params = pkg->AllParams();
+    Params& params = pkg->AllParams();
 
     // Inversion scheme.  Could be separate packages but they do share a lot,
     // and could share more e.g. inline floor applications
     std::vector<std::string> allowed_inverter_names = {"none", "onedw", "kastaun"};
-    std::string inverter_name = pin->GetOrAddString("inverter", "type", "kastaun", allowed_inverter_names);
+    std::string inverter_name =
+        pin->GetOrAddString("inverter", "type", "kastaun", allowed_inverter_names);
     bool use_kastaun = false;
     if (inverter_name == "onedw") {
         params.Add("inverter_type", Type::onedw);
@@ -65,7 +68,8 @@ std::shared_ptr<KHARMAPackage> Inverter::Initialize(ParameterInput *pin, std::sh
     }
 
     // Solver options
-    // Any other Noble et al. implemented for fun should use lower tol/iter count, see Noble+06
+    // Any other Noble et al. implemented for fun should use lower tol/iter count, see
+    // Noble+06
     Real err_tol = pin->GetOrAddReal("inverter", "err_tol", (use_kastaun) ? 1e-14 : 1e-8);
     params.Add("err_tol", err_tol);
     int iter_max = pin->GetOrAddInteger("inverter", "iter_max", (use_kastaun) ? 25 : 8);
@@ -73,24 +77,36 @@ std::shared_ptr<KHARMAPackage> Inverter::Initialize(ParameterInput *pin, std::sh
 
     // TODO only need these if Floors aren't loaded
     // Floor options
-    // Use a custom block for inverter floors to allow customization.  Not sure anyone *wants* that but...
+    // Use a custom block for inverter floors to allow customization.  Not sure anyone
+    // *wants* that but...
     if (!pin->DoesBlockExist("inverter_floors")) {
         params.Add("inverter_prescription", Floors::MakePrescription(pin, "floors"));
-            if (pin->DoesBlockExist("floors_inner"))
-                params.Add("inverter_prescription_inner", Floors::MakePrescriptionInner(pin, Floors::MakePrescription(pin, "floors"), "floors_inner"));
-            else
-                params.Add("inverter_prescription_inner", Floors::MakePrescriptionInner(pin, Floors::MakePrescription(pin, "floors"), "floors"));
+        if (pin->DoesBlockExist("floors_inner"))
+            params.Add("inverter_prescription_inner",
+                Floors::MakePrescriptionInner(
+                    pin, Floors::MakePrescription(pin, "floors"), "floors_inner"));
+        else
+            params.Add("inverter_prescription_inner",
+                Floors::MakePrescriptionInner(
+                    pin, Floors::MakePrescription(pin, "floors"), "floors"));
     } else {
-        params.Add("inverter_prescription", Floors::MakePrescription(pin, "inverter_floors"));
-        params.Add("inverter_prescription_inner", Floors::MakePrescriptionInner(pin, Floors::MakePrescription(pin, "inverter_floors"), "inverter_floors"));
+        params.Add(
+            "inverter_prescription", Floors::MakePrescription(pin, "inverter_floors"));
+        params.Add("inverter_prescription_inner",
+            Floors::MakePrescriptionInner(pin,
+                Floors::MakePrescription(pin, "inverter_floors"), "inverter_floors"));
     }
 
     // Fixup options
-    // Fix by averaging neighboring cells.  Enabled by default for 1Dw, but Kastaun failures are more dire
-    bool fix_average_neighbors = pin->GetOrAddBoolean("inverter", "fix_average_neighbors", !use_kastaun);
+    // Fix by averaging neighboring cells.  Enabled by default for 1Dw, but Kastaun
+    // failures are more dire
+    bool fix_average_neighbors =
+        pin->GetOrAddBoolean("inverter", "fix_average_neighbors", !use_kastaun);
     params.Add("fix_average_neighbors", fix_average_neighbors);
-    // Fix by replacing with floors, uvec=0. Backstop for states which are just impossible to use
-    bool fix_atmosphere = pin->GetOrAddBoolean("inverter", "fix_atmosphere", !use_kastaun);
+    // Fix by replacing with floors, uvec=0. Backstop for states which are just impossible
+    // to use
+    bool fix_atmosphere =
+        pin->GetOrAddBoolean("inverter", "fix_atmosphere", !use_kastaun);
     params.Add("fix_atmosphere", fix_atmosphere);
 
     // New "backstop" code: ensure positive internal energy by
@@ -98,12 +114,16 @@ std::shared_ptr<KHARMAPackage> Inverter::Initialize(ParameterInput *pin, std::sh
     bool backstop = pin->GetOrAddBoolean("inverter", "backstop", use_kastaun);
     params.Add("backstop", backstop);
     // Note these aren't called if the backstop isn't enabled!
-    bool backstop_recover_vel = pin->GetOrAddBoolean("inverter", "backstop_recover_vel", true);
+    bool backstop_recover_vel =
+        pin->GetOrAddBoolean("inverter", "backstop_recover_vel", true);
     params.Add("backstop_recover_vel", backstop_recover_vel);
-    bool backstop_recover_u = pin->GetOrAddBoolean("inverter", "backstop_recover_u", false);
+    bool backstop_recover_u =
+        pin->GetOrAddBoolean("inverter", "backstop_recover_u", false);
     params.Add("backstop_recover_u", backstop_recover_u);
     if (backstop && backstop_recover_vel && backstop_recover_u) {
-        throw std::runtime_error("Inverter parameters error: cannot recover with backstop_recover_vel and backstop_recover_u!  Please choose one option.");
+        throw std::runtime_error(
+            "Inverter parameters error: cannot recover with backstop_recover_vel and "
+            "backstop_recover_u!  Please choose one option.");
     }
 
     // Flag denoting UtoP inversion failures
@@ -112,14 +132,17 @@ std::shared_ptr<KHARMAPackage> Inverter::Initialize(ParameterInput *pin, std::sh
     bool sync_prims = packages->Get("Driver")->Param<bool>("sync_prims");
     Metadata m;
     if (sync_prims && fix_average_neighbors) {
-        m = Metadata({Metadata::Real, Metadata::Cell, Metadata::Derived, Metadata::OneCopy, Metadata::FillGhost});
+        m = Metadata({Metadata::Real, Metadata::Cell, Metadata::Derived,
+            Metadata::OneCopy, Metadata::FillGhost});
     } else {
-        m = Metadata({Metadata::Real, Metadata::Cell, Metadata::Derived, Metadata::OneCopy});
+        m = Metadata(
+            {Metadata::Real, Metadata::Cell, Metadata::Derived, Metadata::OneCopy});
     }
     pkg->AddField("pflag", m);
 
     // When not using floors, we need to declare fflag for ourselves
-    m = Metadata({Metadata::Real, Metadata::Cell, Metadata::Derived, Metadata::OneCopy, Metadata::Overridable});
+    m = Metadata({Metadata::Real, Metadata::Cell, Metadata::Derived, Metadata::OneCopy,
+        Metadata::Overridable});
     pkg->AddField("fflag", m);
 
     // This package may be loaded even when evolving implicitly, e.g. for FOFC
@@ -127,10 +150,12 @@ std::shared_ptr<KHARMAPackage> Inverter::Initialize(ParameterInput *pin, std::sh
     if (!pin->GetBoolean("GRMHD", "implicit") || pin->GetBoolean("emhd", "ideal_guess")) {
         // We exist basically to do this
         pkg->BlockUtoP = Inverter::BlockUtoP;
-        // We want to run U->P on most boundaries when we're synchronizing conserved variables
+        // We want to run U->P on most boundaries when we're synchronizing conserved
+        // variables
         pkg->BoundaryUtoP = Inverter::BlockUtoP;
         // However, we apply domain boundaries to primitives.
-        // Registering this additional function conveys that to the callers in `Packages` and `Boundaries`
+        // Registering this additional function conveys that to the callers in `Packages`
+        // and `Boundaries`
         pkg->DomainBoundaryPtoU = Flux::BlockPtoUMHD;
     }
 
@@ -139,9 +164,11 @@ std::shared_ptr<KHARMAPackage> Inverter::Initialize(ParameterInput *pin, std::sh
     // List (vector) of HistoryOutputVars that will all be enrolled as output variables
     parthenon::HstVar_list hst_vars = {};
     // Count total floors as a history item
-    hst_vars.emplace_back(parthenon::HistoryOutputVar(UserHistoryOperation::sum, CountPFlags, "PFlags"));
+    hst_vars.emplace_back(
+        parthenon::HistoryOutputVar(UserHistoryOperation::sum, CountPFlags, "PFlags"));
     // TODO entries for each individual flag?
-    // add callbacks for HST output to the Params struct, identified by the `hist_param_key`
+    // add callbacks for HST output to the Params struct, identified by the
+    // `hist_param_key`
     pkg->AddParam<>(parthenon::hist_param_key, hst_vars);
 
     return pkg;
@@ -152,7 +179,8 @@ std::shared_ptr<KHARMAPackage> Inverter::Initialize(ParameterInput *pin, std::sh
  * This is called with the correct template argument from BlockUtoP
  */
 template<Inverter::Type inverter>
-inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, bool coarse)
+inline void BlockPerformInversion(
+    MeshBlockData<Real>* rc, IndexDomain domain, bool coarse)
 {
     auto pmb = rc->GetBlockPointer();
 
@@ -164,58 +192,64 @@ inline void BlockPerformInversion(MeshBlockData<Real> *rc, IndexDomain domain, b
     // auto fflag = rc->PackVariables(std::vector<std::string>{"fflag"});
     auto pflag = rc->PackVariables(std::vector<std::string>{"pflag"});
 
-    if (U.GetDim(4) == 0 || pflag.GetDim(4) == 0)
-        return;
+    if (U.GetDim(4) == 0 || pflag.GetDim(4) == 0) return;
 
     const Real gam = pmb->packages.Get("GRMHD")->Param<Real>("gamma");
 
-    auto &pars = pmb->packages.Get("Inverter")->AllParams();
+    auto& pars = pmb->packages.Get("Inverter")->AllParams();
     const Real err_tol = pars.Get<Real>("err_tol");
     const int iter_max = pars.Get<int>("iter_max");
 
     // If we set the floors package to use normal frame w/Kastaun inverter, *or*
     // if we disabled the floors package, go ahead and apply all floors in this function
-    const bool normal_frame_floors = (pmb->packages.AllPackages().count("Floors")) ?
-                                        pmb->packages.Get("Floors")->Param<Floors::InjectionFrame>("frame") ==
-                                            Floors::InjectionFrame::normal_kastaun :
-                                        true;
+    const bool normal_frame_floors =
+        (pmb->packages.AllPackages().count("Floors"))
+            ? pmb->packages.Get("Floors")->Param<Floors::InjectionFrame>("frame") ==
+                  Floors::InjectionFrame::normal_kastaun
+            : true;
 
     const auto& G = pmb->coords;
 
-    // Notice by default, we recover variables for only the physical (interior or interior-ghost)
-    // zones!  These are the only ones which are filled at our point in the step
+    // Notice by default, we recover variables for only the physical (interior or
+    // interior-ghost) zones!  These are the only ones which are filled at our point in
+    // the step
     const IndexRange3 b = (domain == IndexDomain::entire)
-                          ? KDomain::GetPhysicalRange(rc) : KDomain::GetRange(rc, domain, coarse);
+                              ? KDomain::GetPhysicalRange(rc)
+                              : KDomain::GetRange(rc, domain, coarse);
 
     // Get the basic/primitive variables from the conserved quantities
     pmb->par_for("U_to_P", b.ks, b.ke, b.js, b.je, b.is, b.ie,
-        KOKKOS_LAMBDA (const int &k, const int &j, const int &i) {
-            int pflagl = Inverter::u_to_p<inverter>(G, U, m_u, gam, k, j, i, P, m_p, Loci::center,
-                                                    iter_max, err_tol);
+        KOKKOS_LAMBDA (const int &k, const int &j, const int &i)
+        {
+            int pflagl = Inverter::u_to_p<inverter>(
+                G, U, m_u, gam, k, j, i, P, m_p, Loci::center, iter_max, err_tol);
             pflag(0, k, j, i) = pflagl;
-        }
-    );
+        });
 }
 
-void Inverter::BlockUtoP(MeshBlockData<Real> *rc, IndexDomain domain, bool coarse)
+void Inverter::BlockUtoP(MeshBlockData<Real>* rc, IndexDomain domain, bool coarse)
 {
-    // This only chooses an implementation.  See BlockPerformInversion and implementations e.g. onedw.hpp
-    auto& type = rc->GetBlockPointer()->packages.Get("Inverter")->Param<Type>("inverter_type");
-    switch(type) {
-    case Type::onedw:
-        BlockPerformInversion<Type::onedw>(rc, domain, coarse);
-        break;
-    case Type::kastaun:
-        BlockPerformInversion<Type::kastaun>(rc, domain, coarse);
-        break;
-    case Type::none:
-        break;
+    // This only chooses an implementation.  See BlockPerformInversion and implementations
+    // e.g. onedw.hpp
+    auto& type =
+        rc->GetBlockPointer()->packages.Get("Inverter")->Param<Type>("inverter_type");
+    switch (type) {
+        case Type::onedw:
+            BlockPerformInversion<Type::onedw>(rc, domain, coarse);
+            break;
+        case Type::kastaun:
+            BlockPerformInversion<Type::kastaun>(rc, domain, coarse);
+            break;
+        case Type::none:
+            break;
     }
-    // This is dangerous since there are many blocks/packs and we need one reduction. For later.
-    //Reductions::StartFlagReduce(md, "pflag", Inverter::status_names, IndexDomain::interior, false, 1);
+    // This is dangerous since there are many blocks/packs and we need one reduction. For
+    // later.
+    // Reductions::StartFlagReduce(md, "pflag", Inverter::status_names,
+    // IndexDomain::interior, false, 1);
 }
 
-TaskStatus Inverter::PostStepDiagnostics(const SimTime& tm, MeshData<Real> *md)
+TaskStatus Inverter::PostStepDiagnostics(const SimTime& tm, MeshData<Real>* md)
 {
     auto pmesh = md->GetMeshPointer();
     auto pmb0 = md->GetBlockData(0)->GetBlockPointer();
@@ -227,14 +261,18 @@ TaskStatus Inverter::PostStepDiagnostics(const SimTime& tm, MeshData<Real> *md)
     // TODO grab the total and die on too many
     if (flag_verbose >= 1) {
         // TODO this should move into UtoP when everything goes MeshData
-        Reductions::StartFlagReduce(md, "pflag", Inverter::status_names, IndexDomain::interior, false, 1);
-        Reductions::CheckFlagReduceAndPrintHits(md, "pflag", Inverter::status_names, IndexDomain::interior, false, 1);
+        Reductions::StartFlagReduce(
+            md, "pflag", Inverter::status_names, IndexDomain::interior, false, 1);
+        Reductions::CheckFlagReduceAndPrintHits(
+            md, "pflag", Inverter::status_names, IndexDomain::interior, false, 1);
 
         // If we're the only floors, print those too
         if (!pmesh->packages.AllPackages().count("Floors")) {
-            Reductions::StartFlagReduce(md, "fflag", Floors::FFlag::flag_names, IndexDomain::interior, true, 0);
+            Reductions::StartFlagReduce(
+                md, "fflag", Floors::FFlag::flag_names, IndexDomain::interior, true, 0);
             // Debugging/diagnostic info about floors
-            Reductions::CheckFlagReduceAndPrintHits(md, "fflag", Floors::FFlag::flag_names, IndexDomain::interior, true, 0);
+            Reductions::CheckFlagReduceAndPrintHits(
+                md, "fflag", Floors::FFlag::flag_names, IndexDomain::interior, true, 0);
         }
     }
 
