@@ -14,9 +14,6 @@ frames_*/
 logs/
 *.log
 
-# Downloaded formatter binary
-bin/clang-format-19
-
 # KHARMA/Parthenon outputs
 *.phdf
 *.rhdf
