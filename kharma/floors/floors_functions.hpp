@@ -201,7 +201,9 @@ KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::fluid>(FLOOR_ONE_ARGS)
 {
     P(m_p.RHO, k, j, i) += m::max(0., rhoflr_max - P(m_p.RHO, k, j, i));
     P(m_p.UU, k, j, i) += m::max(0., uflr_max - P(m_p.UU, k, j, i));
-    return 0;
+
+    // Indicates no primitive variable inversion was performed
+    return -1;
 }
 
 template<>
@@ -355,13 +357,13 @@ template<>
 KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::mixed_fluid_normal>(
     FLOOR_ONE_ARGS)
 {
-    return 0;
+    return -1;
 }
 template<>
 KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::mixed_normal_drift>(
     FLOOR_ONE_ARGS)
 {
-    return 0;
+    return -1;
 }
 
 // KOKKOS_INLINE_FUNCTION rho_to_slow()
