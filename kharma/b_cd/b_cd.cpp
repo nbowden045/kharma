@@ -85,9 +85,9 @@ std::shared_ptr<KHARMAPackage> Initialize(
     // Constraint damping scalar field psi.  Prim and cons forms correspond to B field
     // forms, i.e. differ by a factor of gdet.  This is apparently marginally more stable
     // in some circumstances.
-    m = Metadata({Metadata::Real, Metadata::Cell, Metadata::Independent,
-        Metadata::FillGhost, Metadata::Restart, Metadata::Conserved,
-        Metadata::WithFluxes});
+    m = Metadata(
+        {Metadata::Real, Metadata::Cell, Metadata::Independent, Metadata::FillGhost,
+            Metadata::Restart, Metadata::Conserved, Metadata::WithFluxes});
     pkg->AddField("cons.psi_cd", m);
     m = Metadata({Metadata::Real, Metadata::Cell, Metadata::Derived, Metadata::Restart,
         Metadata::GetUserFlag("Primitive")});
@@ -296,7 +296,7 @@ void FillOutput(MeshBlock* pmb, ParameterInput* pin)
     if (ndim < 2) return;
 
     auto B = rc->PackVariablesAndFluxes(std::vector<std::string>{"cons.B"});
-    
+
     auto& divB = rc->Get("divB").data;
 
     const IndexRange ib = rc->GetBoundsI(IndexDomain::interior);
@@ -313,14 +313,11 @@ void FillOutput(MeshBlock* pmb, ParameterInput* pin)
         KOKKOS_LAMBDA (const int &k, const int &j, const int &i)
         {
             double divb_local =
-                ((B.flux(1, V1, k, j, i + 1) - B.flux(1, V1, k, j, i)) /
-                        G.Dxc<1>(i) +
-                    (B.flux(2, V2, k, j + 1, i) - B.flux(2, V2, k, j, i)) /
-                        G.Dxc<2>(j));
+                ((B.flux(1, V1, k, j, i + 1) - B.flux(1, V1, k, j, i)) / G.Dxc<1>(i) +
+                    (B.flux(2, V2, k, j + 1, i) - B.flux(2, V2, k, j, i)) / G.Dxc<2>(j));
             if (ndim > 2)
                 divb_local +=
-                    (B.flux(3, V3, k + 1, j, i) - B.flux(3, V3, k, j, i)) /
-                    G.Dxc<3>(k);
+                    (B.flux(3, V3, k + 1, j, i) - B.flux(3, V3, k, j, i)) / G.Dxc<3>(k);
 
             divB(k, j, i) = divb_local;
         });
