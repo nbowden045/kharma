@@ -201,7 +201,7 @@ KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::fluid>(FLOOR_ONE_ARGS)
 {
     P(m_p.RHO, k, j, i) += m::max(0., rhoflr_max - P(m_p.RHO, k, j, i));
     P(m_p.UU, k, j, i) += m::max(0., uflr_max - P(m_p.UU, k, j, i));
-    return -1;
+    return 0;
 }
 
 template<>
@@ -219,7 +219,7 @@ KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::drift>(FLOOR_ONE_ARGS)
     const Real rho = P(m_p.RHO, k, j, i);
     const Real uu = P(m_p.UU, k, j, i);
     const Real pg = (gam - 1.) * uu;
-    const Real w_old = m::max(rho + uu + pg, SMALL);
+    const Real w_old = m::max(rho + uu + pg, SMALL_NUM);
 
     // Normal observer magnetic field
     Real Bcon[GR_DIM] = {0};
@@ -232,7 +232,7 @@ KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::drift>(FLOOR_ONE_ARGS)
     }
     DLOOP2
         Bcov[mu] += G.gcov(Loci::center, j, i, mu, nu) * Bcon[nu];
-    const Real Bsq = m::max(dot(Bcon, Bcov), SMALL);
+    const Real Bsq = m::max(dot(Bcon, Bcov), SMALL_NUM);
     const Real B_mag = m::sqrt(Bsq);
 
     // Get four-vectors again
@@ -349,6 +349,21 @@ KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::normal_kastaun>(FLOOR_ON
         G, U, m_u, gam, k, j, i, P, m_p, Loci::center, 25, 1e-14);
 }
 
+// These are implemented as special cases in the kernel in floors_impl.hpp
+// We define them here as no-ops so they resolve in the general template call-through
+template<>
+KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::mixed_fluid_normal>(
+    FLOOR_ONE_ARGS)
+{
+    return 0;
+}
+template<>
+KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::mixed_normal_drift>(
+    FLOOR_ONE_ARGS)
+{
+    return 0;
+}
+
 // KOKKOS_INLINE_FUNCTION rho_to_slow()
 // {
 
@@ -424,7 +439,7 @@ KOKKOS_INLINE_FUNCTION int apply_floors<InjectionFrame::normal_kastaun>(FLOOR_ON
 //             Real f = func_W(z);
 //             // Quit if convergence reached
 //             if ((m::abs(f) < 1e-8) || (m::abs(zm-zp) < 1e-10)) {
-//                 // Return failure if
+//                 // Return failure if out of tolerance
 //                 vel_solve_failed = m::abs(f) > 1e-8;
 //                 break;
 //             }
@@ -492,6 +507,7 @@ KOKKOS_INLINE_FUNCTION int apply_geo_floors(const GRCoordinates& G, Local& P,
 
     P(m.RHO) += m::max(0., rhoflr_geom - P(m.RHO));
     P(m.UU) += m::max(0., uflr_geom - P(m.UU));
+
     // These are a last-ditch *after* the usual floor applications.  Keep them stable
     if (fflag) {
         P(m.U1) = 0.;
@@ -537,6 +553,7 @@ KOKKOS_INLINE_FUNCTION int apply_geo_floors(const GRCoordinates& G, Global& P,
 
     P(m.RHO, k, j, i) += m::max(0., rhoflr_geom - P(m.RHO, k, j, i));
     P(m.UU, k, j, i) += m::max(0., uflr_geom - P(m.UU, k, j, i));
+
     // These are a last-ditch *after* the usual floor applications.  Keep them stable
     if (fflag) {
         P(m.U1, k, j, i) = 0.;

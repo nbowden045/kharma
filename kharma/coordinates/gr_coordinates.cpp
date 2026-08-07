@@ -132,7 +132,7 @@ void init_GRCoordinates(GRCoordinates& G)
     auto gdet_conn_local = G.gdet_conn_direct;
 
     Kokkos::parallel_for("init_geom", MDRangePolicy<Rank<2>>({0, 0}, {n2 + 1, n1 + 1}),
-        KOKKOS_LAMBDA (const int& j, const int& i)
+        KOKKOS_LAMBDA(const int& j, const int& i)
         {
             // Iterate through locations. This could be done in fancy ways, but
             // this highlights what's actually going on.
@@ -227,7 +227,7 @@ void init_GRCoordinates(GRCoordinates& G)
         });
     if (correct_connections) {
         Kokkos::parallel_for("geom_corrections", MDRangePolicy<Rank<2>>({0, 0}, {n2, n1}),
-            KOKKOS_LAMBDA (const int& j, const int& i)
+            KOKKOS_LAMBDA(const int& j, const int& i)
             {
                 // In the two directions the grid changes, make sure that we *exactly*
                 // satisfy the req't gdet*conn^mu_mu_nu = d_nu gdet, when evaluated on
@@ -245,7 +245,8 @@ void init_GRCoordinates(GRCoordinates& G)
                         double gdetfm = gdet_local(loc, j, i);
                         double gdetfp =
                             gdet_local(loc, j + (lam == X2DIR), i + (lam == X1DIR));
-                        GReal target = (gdetfp - gdetfm) / (Xfp[lam] - Xfm[lam] + SMALL);
+                        GReal target =
+                            (gdetfp - gdetfm) / (Xfp[lam] - Xfm[lam] + SMALL_NUM);
 
                         // Then sum the coefficients and record nonzero ones for
                         // modification
