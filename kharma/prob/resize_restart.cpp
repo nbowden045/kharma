@@ -99,6 +99,7 @@ void ReadIharmRestartHeader(std::string fname, ParameterInput *pin)
         hdf5_read_single_val(&Rin, "Rin", H5T_IEEE_F64LE);
         hdf5_read_single_val(&Rout, "Rout", H5T_IEEE_F64LE);
     } else {
+        std::cout << std::endl; // flush messages in output buffer before we error
         throw std::runtime_error("Unknown restart file type!");
     }
 

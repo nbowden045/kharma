@@ -78,10 +78,14 @@ std::shared_ptr<KHARMAPackage> Flux::Initialize(ParameterInput *pin, std::shared
     std::string recon = pin->GetOrAddString("flux", "reconstruction", default_recon_s, recon_allowed_vals);
     bool lower_edges = pin->GetOrAddBoolean("flux", "low_order_edges", false);
     bool lower_poles = pin->GetOrAddBoolean("flux", "low_order_poles", false);
-    if (lower_edges && lower_poles)
+    if (lower_edges && lower_poles) {
+        std::cout << std::endl; // flush messages in output buffer before we error
         throw std::runtime_error("Cannot enable lowered reconstruction on edges and poles!");
-    if ((lower_edges || lower_poles) && recon != "weno5")
+    }
+    if ((lower_edges || lower_poles) && recon != "weno5") {
+        std::cout << std::endl; // flush messages in output buffer before we error
         throw std::runtime_error("Lowered reconstructions can only be enabled with weno5!");
+    }
 
     int stencil = 0;
     if (recon == "donor_cell") {
@@ -123,6 +127,7 @@ std::shared_ptr<KHARMAPackage> Flux::Initialize(ParameterInput *pin, std::shared
     // Warn if using less than 3 ghost zones w/WENO etc, 2 w/Linear, etc.
     // SMR/AMR independently requires an even number of zones, so we usually use 4
     if (Globals::nghost < (stencil/2 + 1)) {
+        std::cout << std::endl; // flush messages in output buffer before we error
         throw std::runtime_error("Not enough ghost zones for specified reconstruction!");
     }
 
@@ -486,6 +491,7 @@ TaskStatus Flux::PostStepDiagnostics(const SimTime& tm, MeshData<Real> *md)
         if (MPIRank0() && (nzero > 0 || nnan > 0)) {
             // TODO string formatting in C++ that doesn't suck
             fprintf(stderr, "Max signal speed ctop of 0 or NaN (%d zero, %d NaN)", nzero, nnan);
+            std::cout << std::endl; // flush messages in output buffer before we error
             throw std::runtime_error("Bad ctop!");
         }
 

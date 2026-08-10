@@ -150,6 +150,7 @@ inline IndexDomain BoundaryDomain(const BoundaryFace face)
         return IndexDomain::outer_x3;
     case BoundaryFace::undef:
     default:
+        std::cout << std::endl; // flush messages in output buffer before we error
         throw std::runtime_error("Undefined boundary face has no domain!");
     }
 }

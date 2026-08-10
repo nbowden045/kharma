@@ -109,6 +109,7 @@ std::shared_ptr<KHARMAPackage> Initialize(ParameterInput *pin, std::shared_ptr<P
 
     // Throw down here, like this, to avoid inaccessible code warnings
     if (1) {
+        std::cout << std::endl; // flush messages in output buffer before we error
         throw std::runtime_error("Constraint-damping transport is not functional with modern B field initialization!");
     } else {
         return pkg;

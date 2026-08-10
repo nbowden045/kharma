@@ -640,8 +640,10 @@ TaskStatus PrintGlobalMaxDivB(MeshData<Real> *md, bool kill_on_large_divb)
             printf("Max DivB: %g\n", divb_max);
         }
         if (kill_on_large_divb) {
-            if (divb_max > pmb0->packages.Get("B_FluxCT")->Param<Real>("kill_on_divb_over"))
+            if (divb_max > pmb0->packages.Get("B_FluxCT")->Param<Real>("kill_on_divb_over")) {
+                std::cout << std::endl; // flush messages in output buffer before we error
                 throw std::runtime_error("DivB exceeds maximum! Quitting...");
+            }
         }
     }
 

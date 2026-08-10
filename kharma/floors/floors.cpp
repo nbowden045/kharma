@@ -95,6 +95,7 @@ std::shared_ptr<KHARMAPackage> Floors::Initialize(ParameterInput *pin, std::shar
                       << "The resulting algorithm is much more stable, but requires that floors be applied in the normal observer frame.\n"
                       << "Consider using the <floors> parameters from pars/tori_3d/mad.par.\n"
                       << "If you know what you're doing, set floors/allow_unsafe=true";
+            std::cout << std::endl; // flush messages in output buffer before we error
             throw std::runtime_error("Unsafe floors requested without override");
         }
     }
@@ -282,6 +283,7 @@ TaskStatus Floors::ApplyGRMHDFloors(MeshData<Real> *md, IndexDomain domain)
     } else if (pars.Get<InjectionFrame>("frame") == InjectionFrame::drift) {
         return ApplyFloorsInFrame<InjectionFrame::drift>(md, domain);
     } else {
+        std::cout << std::endl; // flush messages in output buffer before we error
         throw std::invalid_argument("Floors for requested frame not implemented!");
     }
 }

@@ -50,7 +50,10 @@ TaskCollection KHARMADriver::MakeSimpleTaskCollection(BlockList_t &blocks, int s
         pkgs.count("Electrons") || flux_pkg.Get<bool>("use_fofc") ||
         pkgs.count("Implicit") || pkgs.count("Current") ||
         pkgs.count("EMHD") || pkgs.count("ISMR") || pmesh->multilevel)
+    {
+        std::cout << std::endl; // flush messages in output buffer before we error
         throw std::runtime_error("Simple driver cannot be used with any advanced features! Use KHARMA or ImEx driver instead!");
+    }
 
     // Allocate the fluid states ("containers") we need for each block
     if (stage == 1) {

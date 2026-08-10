@@ -133,7 +133,10 @@ class CoordinateEmbedding {
                 GReal a = pin->GetReal("coordinates", "a");
                 bool ext_g = pin->GetOrAddBoolean("coordinates", "ext_g", false);
                 if (ext_g || base_str == "spherical_ks_extg" || base_str == "ks_extg") {
-                    if (a > 0) throw std::invalid_argument("Transform is for spherical coordinates!");
+                    if (a > 0) {
+                        std::cout << std::endl; // flush messages in output buffer before we error
+                        throw std::invalid_argument("Transform is for spherical coordinates!");
+                    }
                     base.emplace<SphKSExtG>(SphKSExtG(a));
                 } else {
                     base.emplace<SphKSCoords>(SphKSCoords(a));
@@ -143,12 +146,16 @@ class CoordinateEmbedding {
                 GReal a = pin->GetReal("coordinates", "a");
                 bool ext_g = pin->GetOrAddBoolean("coordinates", "ext_g", false);
                 if (ext_g || base_str == "spherical_bl_extg" || base_str == "bl_extg") {
-                    if (a > 0) throw std::invalid_argument("Transform is for spherical coordinates!");
+                    if (a > 0) {
+                        std::cout << std::endl; // flush messages in output buffer before we error
+                        throw std::invalid_argument("Transform is for spherical coordinates!");
+                    }
                     base.emplace<SphBLExtG>(SphBLExtG(a));
                 } else {
                     base.emplace<SphBLCoords>(SphBLCoords(a));
                 }
             } else {
+                std::cout << std::endl; // flush messages in output buffer before we error
                 throw std::invalid_argument("Unsupported base coordinates!");
             }
 
@@ -161,20 +168,32 @@ class CoordinateEmbedding {
                     transform.emplace<NullTransform>(NullTransform());
                 }
             } else if (transform_str == "exponential" || transform_str == "exp" || transform_str == "eks") {
-                if (!spherical) throw std::invalid_argument("Transform is for spherical coordinates!");
+                if (!spherical) {
+                    std::cout << std::endl; // flush messages in output buffer before we error
+                    throw std::invalid_argument("Transform is for spherical coordinates!");
+                }
                 transform.emplace<ExponentialTransform>(ExponentialTransform());
             } else if (transform_str == "superexponential" || transform_str == "superexp") {
-                if (!spherical) throw std::invalid_argument("Transform is for spherical coordinates!");
+                if (!spherical) {
+                    std::cout << std::endl; // flush messages in output buffer before we error
+                    throw std::invalid_argument("Transform is for spherical coordinates!");
+                }
                 GReal r_br = pin->GetOrAddReal("coordinates", "r_br", 1000.);
                 GReal npow = pin->GetOrAddReal("coordinates", "npow", 1.0);
                 GReal cpow = pin->GetOrAddReal("coordinates", "cpow", 4.0);
                 transform.emplace<SuperExponentialTransform>(SuperExponentialTransform(r_br, npow, cpow));
             } else if (transform_str == "modified" || transform_str == "mks") {
-                if (!spherical) throw std::invalid_argument("Transform is for spherical coordinates!");
+                if (!spherical) {
+                    std::cout << std::endl; // flush messages in output buffer before we error
+                    throw std::invalid_argument("Transform is for spherical coordinates!");
+                }
                 GReal hslope = pin->GetOrAddReal("coordinates", "hslope", 0.3);
                 transform.emplace<ModifyTransform>(ModifyTransform(hslope));
             } else if (transform_str == "funky" || transform_str == "fmks") {
-                if (!spherical) throw std::invalid_argument("Transform is for spherical coordinates!");
+                if (!spherical) {
+                    std::cout << std::endl; // flush messages in output buffer before we error
+                    throw std::invalid_argument("Transform is for spherical coordinates!");
+                }
                 GReal hslope = pin->GetOrAddReal("coordinates", "hslope", 0.3);
                 GReal mks_smooth = pin->GetOrAddReal("coordinates", "mks_smooth", 0.5);
                 GReal poly_xt = pin->GetOrAddReal("coordinates", "poly_xt", 0.82);
@@ -190,13 +209,17 @@ class CoordinateEmbedding {
                 }
                 transform.emplace<FunkyTransform>(FunkyTransform(startx1, hslope, mks_smooth, poly_xt, poly_alpha));
             } else if (transform_str == "widepole" || transform_str == "wks") {
-                if (!spherical) throw std::invalid_argument("Transform is for spherical coordinates!");
+                if (!spherical) {
+                    std::cout << std::endl; // flush messages in output buffer before we error
+                    throw std::invalid_argument("Transform is for spherical coordinates!");
+                }
                 GReal lin_frac = pin->GetOrAddReal("coordinates", "lin_frac", 0.6);
                 GReal smoothness = pin->GetOrAddReal("coordinates", "smoothness", -1.0);
                 GReal nx2 = pin->GetReal("parthenon/mesh", "nx2");
                 GReal nx3 = pin->GetReal("parthenon/mesh", "nx3");
                 transform.emplace<WidepoleTransform>(WidepoleTransform(lin_frac, smoothness, nx2, nx3));
             } else {
+                std::cout << std::endl; // flush messages in output buffer before we error
                 throw std::invalid_argument("Unsupported coordinate transform!");
             }
         }

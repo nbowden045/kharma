@@ -50,8 +50,10 @@
 
 // The package should never be loaded if there is not a global solve to be done.
 // Therefore we yell at load time rather than waiting for the first solve
-std::shared_ptr<KHARMAPackage> B_Cleanup::Initialize(ParameterInput *pin, std::shared_ptr<Packages_t>& packages)
-{throw std::runtime_error("KHARMA was compiled without global solvers!  Cannot clean B Field!");}
+std::shared_ptr<KHARMAPackage> B_Cleanup::Initialize(ParameterInput *pin, std::shared_ptr<Packages_t>& packages) {
+    std::cout << std::endl; // flush messages in output buffer before we error
+    throw std::runtime_error("KHARMA was compiled without global solvers!  Cannot clean B Field!");
+}
 // We still need a stub for CleanupDivergence() in order to compile, but it will never be called
 TaskStatus B_Cleanup::CleanupDivergence(std::shared_ptr<MeshData<Real>>& md) {}
 bool B_Cleanup::CleanupThisStep(Mesh* pmesh, int nstep) {}
@@ -165,6 +167,8 @@ std::shared_ptr<KHARMAPackage> B_Cleanup::Initialize(ParameterInput *pin, std::s
 
     if (manage_field) {
         // Copy in the field initialization from B_CT and/or B_FluxCT here to declare the right stuff
+
+        std::cout << std::endl; // flush messages in output buffer before we error
         throw std::runtime_error("B field cleanup/projection is set as B field transport! This is not implemented!");
     }
 

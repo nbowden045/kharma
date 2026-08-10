@@ -74,8 +74,10 @@ void KBoundaries::TransmitSetTE(MeshBlockData<Real> *rc, VariablePack<Real> &q, 
     const auto domain = BoundaryDomain(bface);
     const auto bname = BoundaryName(bface);
 
-    if (bdir != 2)
+    if (bdir != 2) {
+        std::cout << std::endl; // flush messages in output buffer before we error
         throw std::runtime_error("Transmitting polar conditions only defined for X2!");
+    }
 
     std::vector<TopologicalElement> el_list;
     if (do_face) {

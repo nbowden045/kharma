@@ -46,7 +46,10 @@
 // The package should never be loaded if there are not implicitly-evolved variables
 // Therefore we yell at load time rather than waiting for the first solve
 std::shared_ptr<KHARMAPackage> Implicit::Initialize(ParameterInput *pin, std::shared_ptr<Packages_t>& packages)
-{ throw std::runtime_error("KHARMA was compiled without implicit stepping support!"); }
+{
+    std::cout << std::endl; // flush messages in output buffer before we error
+    throw std::runtime_error("KHARMA was compiled without implicit stepping support!");
+}
 // We still need a stub for Step() in order to compile, but it will never be called
 TaskStatus Implicit::Step(MeshData<Real> *md_full_step_init, MeshData<Real> *md_sub_step_init, MeshData<Real> *md_flux_src,
                 MeshData<Real> *md_linesearch, MeshData<Real> *md_solver, const Real& dt) {}
