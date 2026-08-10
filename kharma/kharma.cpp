@@ -221,6 +221,7 @@ void KHARMA::FixParameters(ParameterInput *pin, bool is_parthenon_restart)
                     // then we want xeh = xin + 5.5 * (xout - xin) / N1TOT:
                     const GReal x1min = (nx1 * x1hor / 5.5 - x1max) / (-1. + nx1 / 5.5);
                     if (x1min < 0.0) {
+                        std::cout << std::endl; // flush messages in output buffer before we error
                         throw std::invalid_argument("Not enough radial zones were specified to put 5 zones inside EH!");
                     }
                     pin->GetOrAddReal("parthenon/mesh", "x1min", x1min);
@@ -400,6 +401,7 @@ Packages_t KHARMA::ProcessPackages(std::unique_ptr<ParameterInput> &pin)
         t_b_field = tl.AddTask(t_grmhd, KHARMA::AddPackage, packages, B_FluxCT::Initialize, pin.get());
         have_b_transport = true;
     } else {
+        std::cout << std::endl; // flush messages in output buffer before we error
         throw std::invalid_argument("Invalid solver! Must be e.g., flux_ct, face_ct, cd, cleanup...");
     }
     // Cleanup for the B field, using an elliptic solve for eliminating divB
