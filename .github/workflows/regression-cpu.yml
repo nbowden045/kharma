@@ -1,0 +1,37 @@
+name: Regression tests (CPU)
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main, dev ]
+
+jobs:
+  # Job 1: Compilation
+  build:
+    runs-on: [self-hosted, kharma]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run compilation
+        run: ./make.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: kharma.host
+
+  # Job 2: Test Matrix
+  test:
+    needs: build
+    runs-on: [self-hosted, kharma]
+    strategy:
+      matrix:
+        test_name:
+          - restart
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+      - name: Run ${{ matrix.test_name }}
+        working-directory: tests/${{ matrix.test_name }}
+        run: ./run.sh
