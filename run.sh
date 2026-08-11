@@ -25,6 +25,7 @@
 MPI_EXE=${MPI_EXE:-}
 MPI_NUM_PROCS=${MPI_NUM_PROCS:-1}
 MPI_EXTRA_ARGS=${MPI_EXTRA_ARGS:-}
+OUTDIR=${OUTDIR:-dumps_kharma}
 
 ### General run script
 
@@ -117,6 +118,11 @@ if [[ "$1" == "-b" ]]; then
   shift
   shift
 fi
+if [[ "$1" == "-d" ]]; then
+  OUTDIR="$2"
+  shift
+  shift
+fi
 
 # Set default exe only if we didn't specify it
 if [ -z "$EXE_NAME" ]; then
@@ -140,12 +146,11 @@ if [ -z "$EXE_NAME" ]; then
 fi
 
 # Run based on preferences
-# TODO Use a subdirectory for dumps with -d
 # TODO can we just set +x to print commands, like does that play nice with exec?
 if [ -z "$MPI_EXE" ]; then
   echo "Running $PROF_EXE $PROF_OPTS $KHARMA_DIR/$EXE_NAME $@ $KHARMA_PROF_OPTS"
-  exec $PROF_EXE $PROF_OPTS $KHARMA_DIR/$EXE_NAME -d dumps_kharma "$@" $KHARMA_PROF_OPTS
+  exec $PROF_EXE $PROF_OPTS $KHARMA_DIR/$EXE_NAME -d "$OUTDIR" "$@" $KHARMA_PROF_OPTS
 else
   echo "Running $MPI_EXE -n $MPI_NUM_PROCS $MPI_EXTRA_ARGS $KHARMA_DIR/$EXE_NAME $@"
-  exec $MPI_EXE -n $MPI_NUM_PROCS $MPI_EXTRA_ARGS $KHARMA_DIR/$EXE_NAME -d dumps_kharma "$@"
+  exec $MPI_EXE -n $MPI_NUM_PROCS $MPI_EXTRA_ARGS $KHARMA_DIR/$EXE_NAME -d "$OUTDIR" "$@"
 fi
