@@ -21,6 +21,8 @@
 # 'ncu_full name_of_output': runs under the Nsight Compute 'ncu' profiler/analyzer, full profile
 # The last two run just one step, but repeat 10-40 times for accurate measurements
 
+echo "Start run.sh"
+
 # Default MPI parameters: don't use MPI or run with 1 process
 MPI_EXE=${MPI_EXE:-}
 MPI_NUM_PROCS=${MPI_NUM_PROCS:-1}
@@ -61,6 +63,8 @@ else
     source $machine
   done
 fi
+
+echo "Sourced files"
 
 if [[ "$1" == "trace" ]]; then
   export KOKKOS_TOOLS_LIBS=$KHARMA_DIR/../kokkos-tools/kp_kernel_logger.so
@@ -140,10 +144,17 @@ if [ -z "$EXE_NAME" ]; then
     # Force a number of OpenMP threads if it doesn't autodetect
     #export OMP_NUM_THREADS=${OMP_NUM_THREADS:-28}
   else
+    if [ -f $KHARMA_DIR/build-artifacts.zip ]; then
+      cd $KHARMA_DIR
+      unzip build-artifacts.zip
+      cd -
+    fi
     echo "KHARMA executable not found!"
     exit
   fi
 fi
+
+chmod +x $KHARMA_DIR/$EXE_NAME
 
 # Run based on preferences
 # TODO can we just set +x to print commands, like does that play nice with exec?
