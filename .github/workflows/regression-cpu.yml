@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run compilation
-        run: ./make.sh
+        run: ./make.sh clean
       - uses: actions/upload-artifact@v4
         with:
           name: build-artifacts
