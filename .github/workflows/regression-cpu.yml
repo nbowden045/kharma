@@ -25,8 +25,25 @@ jobs:
     runs-on: [self-hosted, kharma]
     strategy:
       matrix:
+        # add back 'resize' when new solvers work
         test_name:
-          - restart
+        - all_pars
+        - anisotropic_conduction
+        - bondi
+        - bondi_viscous
+        - bz_monopole
+        - conducting_atmosphere
+        - emhdmodes
+        - emhdshock
+        - hubble_flow
+        - mhdmodes
+        - mhdmodes_smr
+        - noh
+        - regrid
+        - reinit
+        - restart
+        - tilt_init
+        - torus_sanity
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
