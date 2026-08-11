@@ -1,6 +1,8 @@
 
+echo $HOST
 # cprather/CI machine andesine
 if [[ "$HOST" == "andesine"* ]]; then
+  echo "Running on CI machine"
   HOST_ARCH="AMDAVX"
   NPROC=24
 
