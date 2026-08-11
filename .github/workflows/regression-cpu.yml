@@ -49,6 +49,8 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: build-artifacts
+      - name: install pyharm
+        run: pip install git+https://github.com/c-prather/pyharm@dev
       - name: Run ${{ matrix.test_name }}
         working-directory: tests/${{ matrix.test_name }}
         run: bash -i ./run.sh
