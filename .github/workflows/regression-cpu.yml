@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run compilation
-        run: ./make.sh clean
+        run: bash -i ./make.sh clean
       - uses: actions/upload-artifact@v4
         with:
           name: build-artifacts
@@ -34,4 +34,4 @@ jobs:
           name: build-artifacts
       - name: Run ${{ matrix.test_name }}
         working-directory: tests/${{ matrix.test_name }}
-        run: ./run.sh
+        run: bash -i ./run.sh
