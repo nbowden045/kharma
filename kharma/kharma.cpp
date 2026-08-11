@@ -441,6 +441,9 @@ Packages_t KHARMA::ProcessPackages(std::unique_ptr<ParameterInput> &pin)
     // There are some packages which must be loaded after all physics
     // Easier to load them separately than list dependencies
 
+    // Now we always load floors package -- "floors/on=false" and "floors/disable_floors=true" now map to "disable_call"!
+    KHARMA::AddPackage(packages, Floors::Initialize, pin.get());
+
     // Flux temporaries must be full size
     KHARMA::AddPackage(packages, Flux::Initialize, pin.get());
 
@@ -453,9 +456,6 @@ Packages_t KHARMA::ProcessPackages(std::unique_ptr<ParameterInput> &pin)
     // And any dirichlet/constant boundaries
     // TODO avoid init if Parthenon will be handling all boundaries?
     KHARMA::AddPackage(packages, KBoundaries::Initialize, pin.get());
-
-    // Now we alsways load floors package -- "on=false" and "disable_floors" map to "disable_call"!
-    KHARMA::AddPackage(packages, Floors::Initialize, pin.get());
 
     // Load the implicit package last, if there are *any* variables that need implicit evolution
     // This lets us just count by flag, rather than checking all the possible parameters that would
