@@ -25,6 +25,7 @@
 MPI_EXE=${MPI_EXE:-}
 MPI_NUM_PROCS=${MPI_NUM_PROCS:-1}
 MPI_EXTRA_ARGS=${MPI_EXTRA_ARGS:-}
+OUTDIR=${OUTDIR:-dumps_kharma}
 
 ### General run script
 
@@ -54,6 +55,13 @@ option() {
   printf '%s\0' "${args_array[@]}" | grep -Fxqz -- $1
 }
 export -f option
+
+# Parse options in a slightly less insane way than before
+# At least this checks for the full space-separated word as a flag
+args_array=($ARGS)
+option() {
+  printf '%s\0' "${args_array[@]}" | grep -Fxqz -- $1
+}
 
 # A machine config in .config overrides our defaults
 if [ -f $HOME/.config/kharma.sh ]; then
@@ -122,6 +130,11 @@ if [[ "$1" == "-b" ]]; then
   shift
   shift
 fi
+if [[ "$1" == "-d" ]]; then
+  OUTDIR="$2"
+  shift
+  shift
+fi
 
 # Set default exe only if we didn't specify it
 if [ -z "$EXE_NAME" ]; then
@@ -139,17 +152,24 @@ if [ -z "$EXE_NAME" ]; then
     # Force a number of OpenMP threads if it doesn't autodetect
     #export OMP_NUM_THREADS=${OMP_NUM_THREADS:-28}
   else
+    if [ -f $KHARMA_DIR/build-artifacts.zip ]; then
+      cd $KHARMA_DIR
+      unzip build-artifacts.zip
+      cd -
+    fi
     echo "KHARMA executable not found!"
     exit
   fi
 fi
 
+chmod +x $KHARMA_DIR/$EXE_NAME
+
 # Run based on preferences
 # TODO can we just set +x to print commands, like does that play nice with exec?
 if [ -z "$MPI_EXE" ]; then
   echo "Running $PROF_EXE $PROF_OPTS $KHARMA_DIR/$EXE_NAME $@ $KHARMA_PROF_OPTS"
-  exec $PROF_EXE $PROF_OPTS $KHARMA_DIR/$EXE_NAME "$@" $KHARMA_PROF_OPTS
+  exec $PROF_EXE $PROF_OPTS $KHARMA_DIR/$EXE_NAME -d "$OUTDIR" "$@" $KHARMA_PROF_OPTS
 else
   echo "Running $MPI_EXE -n $MPI_NUM_PROCS $MPI_EXTRA_ARGS $KHARMA_DIR/$EXE_NAME $@"
-  exec $MPI_EXE -n $MPI_NUM_PROCS $MPI_EXTRA_ARGS $KHARMA_DIR/$EXE_NAME "$@"
+  exec $MPI_EXE -n $MPI_NUM_PROCS $MPI_EXTRA_ARGS $KHARMA_DIR/$EXE_NAME -d "$OUTDIR" "$@"
 fi

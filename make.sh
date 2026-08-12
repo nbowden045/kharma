@@ -301,7 +301,8 @@ fi
 if option "clean"; then
 
   # Should do this manually when compiling on backend nodes!
-  if [ ! -f external/parthenon/CMakeLists.txt ]; then
+  if [ ! -f external/parthenon/CMakeLists.txt -o \
+       ! -f external/singularity-eos/CMakeLists.txt ]; then
     git submodule update --recursive --init
   fi
 
