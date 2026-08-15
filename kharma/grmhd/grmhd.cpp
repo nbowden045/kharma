@@ -369,7 +369,7 @@ Real EstimateTimestep(MeshData<Real>* md)
     Flag("EstimateTimestep");
     auto pmesh = md->GetMeshPointer();
     auto& globals = pmesh->packages.Get("Globals")->AllParams();
-    const int &verbose = globals.Get<int>("verbose");
+    const int& verbose = globals.Get<int>("verbose");
     const auto& grmhd_pars = pmesh->packages.Get("GRMHD")->AllParams();
 
     // Other things we might have to return (light-crossing, pre-set timestep, etc.)
@@ -479,7 +479,8 @@ Real EstimateTimestep(MeshData<Real>* md)
     const double dt_max = grmhd_pars.Get<double>("max_dt_increase") * dt_last;
     if (verbose > 1) {
         std::cerr << "Updating dt. min allowed: " << dt_min << "max allowed: " << dt_max
-                << "\nCalculated timestep (w/CFL factor!): " << min_ndt * cfl << std::endl;
+                  << "\nCalculated timestep (w/CFL factor!): " << min_ndt * cfl
+                  << std::endl;
     }
     const double ndt = clip(min_ndt * cfl, dt_min, dt_max);
 
