@@ -21,8 +21,6 @@
 # 'ncu_full name_of_output': runs under the Nsight Compute 'ncu' profiler/analyzer, full profile
 # The last two run just one step, but repeat 10-40 times for accurate measurements
 
-echo "Start run.sh"
-
 # Default MPI parameters: don't use MPI or run with 1 process
 MPI_EXE=${MPI_EXE:-}
 MPI_NUM_PROCS=${MPI_NUM_PROCS:-1}
@@ -39,13 +37,24 @@ export CUDA_LAUNCH_BLOCKING=0
 # Kokkos can be forced to use only a particular device:
 #export KOKKOS_DEVICE_ID=0
 
-# Choose the kharma binary from compiled options in order of preference
-KHARMA_DIR="$(dirname "${BASH_SOURCE[0]}")"
+### Load basic stuff ###
+KHARMA_DIR=$(dirname "$(readlink -f "$0")")
+# Old run.sh version. Why?
+#KHARMA_DIR="$(dirname "${BASH_SOURCE[0]}")"
 
-# Load environment from the same files as the compile process
 HOST=$(hostname -f)
+if [ -z $HOST ]; then
+  HOST=$(hostname)
+fi
 ARGS=${ARGS:-$(cat $KHARMA_DIR/make_args)}
-SOURCE_DIR=$(dirname "$(readlink -f "$0")")
+
+# Parse options in a slightly less insane way than before
+# At least this checks for the full space-separated word as a flag
+args_array=( $ARGS )
+option() {
+  printf '%s\0' "${args_array[@]}" | grep -Fxqz -- $1
+}
+export -f option
 
 # Parse options in a slightly less insane way than before
 # At least this checks for the full space-separated word as a flag
@@ -58,14 +67,13 @@ option() {
 if [ -f $HOME/.config/kharma.sh ]; then
   source $HOME/.config/kharma.sh
 else
-  for machine in $SOURCE_DIR/machines/*.sh
+  for machine in $KHARMA_DIR/machines/*.sh
   do
     source $machine
   done
 fi
 
-echo "Sourced files"
-
+# Run-script-specific stuff
 if [[ "$1" == "trace" ]]; then
   export KOKKOS_TOOLS_LIBS=$KHARMA_DIR/../kokkos-tools/kp_kernel_logger.so
   shift

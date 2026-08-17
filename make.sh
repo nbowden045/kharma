@@ -41,9 +41,10 @@ SOURCE_DIR=$(dirname "$(readlink -f "$0")")
 # Parse options in a slightly less insane way than before
 # At least this checks for the full space-separated word as a flag
 args_array=( "$@" )
-option () {
+option() {
   printf '%s\0' "${args_array[@]}" | grep -Fxqz -- $1
 }
+export -f option
 
 # A machine config in .config overrides our defaults
 if [ -f $HOME/.config/kharma.sh ]; then

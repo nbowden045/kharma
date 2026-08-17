@@ -74,7 +74,8 @@ std::shared_ptr<KHARMAPackage> KHARMA::InitializeGlobals(ParameterInput *pin, st
     // or preventing bad outcomes at known times
     params.Add("time", 0.0, true);
     // Last step's dt (Parthenon SimTime tm.dt), which must be preserved to output jcon
-    params.Add("dt_last", 0.0, true);
+    // Also sets max step increase, so we initialize it to max value to allow any first step size
+    params.Add("dt_last", std::numeric_limits<double>::max(), true);
     // Whether we are computing initial outputs/timestep, or versions in the execution loop
     params.Add("in_loop", false, true);
 
@@ -448,6 +449,7 @@ Packages_t KHARMA::ProcessPackages(std::unique_ptr<ParameterInput> &pin)
     KHARMA::AddPackage(packages, Flux::Initialize, pin.get());
 
     // ISMR temporaries must be full size
+    // TODO(CEP) check nlevels > 0 -- better yet provenance, guarantee specific ismr/on=false ALWAYS disables
     if (pin->GetOrAddBoolean("ismr", "on", false) || pin->DoesParameterExist("ismr", "nlevels")) {
         pin->SetBoolean("ismr", "on", true);
         KHARMA::AddPackage(packages, ISMR::Initialize, pin.get());
