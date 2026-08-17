@@ -70,8 +70,6 @@ static constexpr int TEMP = ipow(2, 10);
 static constexpr int GAMMA = ipow(2, 11);
 static constexpr int KTOT = ipow(2, 12);
 // Separate flags for when the floors are applied after reconstruction.
-// Not yet used, as this will likely have some speed penalty paid even if
-// the flags aren't written
 static constexpr int GEOM_RHO_FLUX = ipow(2, 13);
 static constexpr int GEOM_U_FLUX = ipow(2, 14);
 // Yet more flags for floors hit during inversion

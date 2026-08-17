@@ -129,6 +129,8 @@ inline TaskStatus GetFlux(MeshData<Real>* md)
     const auto& Fl_all = md->PackVariables(std::vector<std::string>{"Flux.Fl"});
     const auto& Fr_all = md->PackVariables(std::vector<std::string>{"Flux.Fr"});
 
+    auto fflag = md->PackVariables(std::vector<std::string>{"fflag"});
+
     // Get the domain size
     // We need fluxes outside the domain for flux-CT and FOFC: one extra zone update on
     // each side
@@ -147,100 +149,114 @@ inline TaskStatus GetFlux(MeshData<Real>* md)
         emhd_params.print();
     }
 
-    // Allocate scratch space
-    const int scratch_level = 1; // 0 is actual scratch (tiny); 1 is HBM
-    const size_t var_size_in_bytes = parthenon::ScratchPad2D<Real>::shmem_size(nvar, n1);
-    const size_t line_size_in_bytes = parthenon::ScratchPad1D<int>::shmem_size(n1);
-    // Allocate enough to cache prims, conserved, and fluxes, for left and right faces,
-    // plus temporaries inside reconstruction (most use none, donor_cell uses one,
-    // linear_vl uses a bunch)
     using RType = KReconstruction::Type;
-    const size_t recon_scratch_bytes =
-        (4 + 1 * (Recon == RType::donor_cell) + 5 * (Recon == RType::linear_vl)) *
-            var_size_in_bytes +
-        line_size_in_bytes;
-    const size_t flux_scratch_bytes = 3 * var_size_in_bytes;
 
     // This isn't a pmb0->par_for_outer because Parthenon's current overloaded definitions
     // do not accept three pairs of bounds, which we need in order to iterate over blocks
     Flag("GetFlux_" + std::to_string(dir) + "_recon");
-    parthenon::par_for_outer(DEFAULT_OUTER_LOOP_PATTERN, "calc_flux_recon",
-        pmb0->exec_space, recon_scratch_bytes, scratch_level, block.s, block.e, b.ks,
-        b.ke, b.js, b.je,
-        KOKKOS_LAMBDA(parthenon::team_mbr_t member,
-                      const int& bl,
+    pmb0->par_for("calc_flux_recon", block.s, block.e, b.ks,
+        b.ke, b.js, b.je, b.is, b.ie,
+        KOKKOS_LAMBDA(const int& bl,
                       const int& k,
-                      const int& j)
+                      const int& j,
+                      const int& i)
         {
             const auto& G = U_all.GetCoords(bl);
-            ScratchPad2D<Real> Pl_s(member.team_scratch(scratch_level), nvar, n1);
-            ScratchPad2D<Real> Pr_s(member.team_scratch(scratch_level), nvar, n1);
-            ScratchPad2D<Real> Plf_s(member.team_scratch(scratch_level), nvar, n1);
-            ScratchPad2D<Real> Prf_s(member.team_scratch(scratch_level), nvar, n1);
-            ScratchPad1D<int> fallback_tvd(member.team_scratch(scratch_level), n1);
 
             // We template on reconstruction type to avoid a big switch statement here.
             // Instead, a version of GetFlux() is generated separately for each
             // reconstruction/direction pair. See reconstruction.hpp for all the
             // implementations.
-            if (use_ismr) {
-                KReconstruction::ReconstructRowIsmr<Recon, dir>(
-                    member, P_all(bl), k, j, b.is, b.ie, ng_plus_nlevels, Pl_s, Pr_s);
-            } else {
-                KReconstruction::ReconstructRow<Recon, dir>(
-                    member, P_all(bl), k, j, b.is, b.ie, Pl_s, Pr_s);
-            }
-
-            // Sync all threads in the team so that scratch memory is consistent
-            member.team_barrier();
-
-            parthenon::par_for_inner(member, b.is, b.ie,
-                [&](const int& i)
-                {
-                    auto Pl = Kokkos::subview(Pl_s, Kokkos::ALL(), i);
-                    auto Pr = Kokkos::subview(Pr_s, Kokkos::ALL(), i);
-                    // Apply floors to the *reconstructed* primitives, because without TVD
-                    // we have no guarantee they remotely resemble the *centered*
-                    // primitives If we selected to fall back to TVD, the floors are at
-                    // zero (as intended)
-                    if (reconstruction_floors || reconstruction_fallback) {
-                        fallback_tvd(i) = Floors::apply_geo_floors(
-                            G, Pl, m_p, gam, j, i, floors, floors_inner, loc);
-                        fallback_tvd(i) |= Floors::apply_geo_floors(
-                            G, Pr, m_p, gam, j, i, floors, floors_inner, loc);
+            for (int p = 0; p <= P_all.GetDim(4) - 1; ++p) {
+                // TODO this could be constexpr/templated with only tens more instantiation lines!
+                if (use_ismr) {
+                    if constexpr (dir == 1) {
+                        KReconstruction::reconstruct<Recon>(P_all(bl, p, k, j, i - 2), P_all(bl, p, k, j, i - 1),
+                            P_all(bl, p, k, j, i), P_all(bl, p, k, j, i + 1), P_all(bl, p, k, j, i + 2),
+                            Pr_all(bl, p, k, j, i), Pl_all(bl, p, k, j, i + 1));
+                    } else if constexpr (dir == 2) {
+                        KReconstruction::reconstruct<Recon>(P_all(bl, p, k, j - 2, i), P_all(bl, p, k, j - 1, i),
+                            P_all(bl, p, k, j, i), P_all(bl, p, k, j + 1, i), P_all(bl, p, k, j + 2, i),
+                            Pr_all(bl, p, k, j, i), Pl_all(bl, p, k, j + 1, i));
+                    } else if constexpr (dir == 3) {
+                        if (j < ng_plus_nlevels || j > P_all.GetDim(2) - 1 - ng_plus_nlevels) {
+                            KReconstruction::reconstruct<RType::linear_mc>(P_all(bl, p, k - 2, j, i), P_all(bl, p, k - 1, j, i),
+                                P_all(bl, p, k, j, i), P_all(bl, p, k + 1, j, i), P_all(bl, p, k + 2, j, i),
+                                Pr_all(bl, p, k, j, i), Pl_all(bl, p, k + 1, j, i));
+                        } else {
+                            KReconstruction::reconstruct<Recon>(P_all(bl, p, k - 2, j, i), P_all(bl, p, k - 1, j, i),
+                                P_all(bl, p, k, j, i), P_all(bl, p, k + 1, j, i), P_all(bl, p, k + 2, j, i),
+                                Pr_all(bl, p, k, j, i), Pl_all(bl, p, k + 1, j, i));
+                        }
                     }
-                });
-            member.team_barrier();
-
-            if (reconstruction_fallback) {
-                // TODO without the whole thing again? Also, option of scheme?
-                KReconstruction::ReconstructRow<RType::ppm, dir>(
-                    member, P_all(bl), k, j, b.is, b.ie, Plf_s, Prf_s);
-                member.team_barrier();
-                for (int p = 0; p <= P_all.GetDim(4) - 1; ++p) {
-                    parthenon::par_for_inner(member, b.is, b.ie,
-                        [&](const int& i)
-                        {
-                            if (fallback_tvd(i)) {
-                                Pl_s(p, i) = Plf_s(p, i);
-                                Pr_s(p, i) = Prf_s(p, i);
-                            }
-                        });
+                } else {
+                    if constexpr (dir == 1) {
+                        KReconstruction::reconstruct<Recon>(P_all(bl, p, k, j, i - 2), P_all(bl, p, k, j, i - 1),
+                            P_all(bl, p, k, j, i), P_all(bl, p, k, j, i + 1), P_all(bl, p, k, j, i + 2),
+                            Pr_all(bl, p, k, j, i), Pl_all(bl, p, k, j, i + 1));
+                    } else if constexpr (dir == 2) {
+                        KReconstruction::reconstruct<Recon>(P_all(bl, p, k, j - 2, i), P_all(bl, p, k, j - 1, i),
+                            P_all(bl, p, k, j, i), P_all(bl, p, k, j + 1, i), P_all(bl, p, k, j + 2, i),
+                            Pr_all(bl, p, k, j, i), Pl_all(bl, p, k, j + 1, i));
+                    } else if constexpr (dir == 3) {
+                        KReconstruction::reconstruct<Recon>(P_all(bl, p, k - 2, j, i), P_all(bl, p, k - 1, j, i),
+                            P_all(bl, p, k, j, i), P_all(bl, p, k + 1, j, i), P_all(bl, p, k + 2, j, i),
+                            Pr_all(bl, p, k, j, i), Pl_all(bl, p, k + 1, j, i));
+                    }
                 }
-                member.team_barrier();
             }
-
-            // Copy out state (TODO(CEP) eliminate)
-            for (int p = 0; p < nvar; ++p) {
-                parthenon::par_for_inner(member, b.is, b.ie,
-                    [&](const int& i)
-                    {
-                        Pl_all(bl, p, k, j, i) = Pl_s(p, i);
-                        Pr_all(bl, p, k, j, i) = Pr_s(p, i);
-                    });
-            }
-            member.team_barrier();
         });
+
+    if (reconstruction_floors || reconstruction_fallback) {
+        pmb0->par_for("calc_flux_reconfloor", block.s, block.e, b.ks,
+            b.ke, b.js, b.je, b.is, b.ie,
+            KOKKOS_LAMBDA(const int& bl,
+                        const int& k,
+                        const int& j,
+                        const int& i)
+            {
+                const auto& G = U_all.GetCoords(bl);
+                // Apply floors to the *reconstructed* primitives, because without TVD
+                // we have no guarantee they remotely resemble the *centered*
+                // primitives If we selected to fall back to TVD, the floors are at
+                // zero (as intended)
+                int fflagl = fflag(bl, 0, k, j, i);
+                fflagl |= Floors::apply_geo_floors(
+                    G, Pl_all(bl), m_p, gam, k, j, i, floors, floors_inner, loc);
+                fflagl |= Floors::apply_geo_floors(
+                    G, Pr_all(bl), m_p, gam, k, j, i, floors, floors_inner, loc);
+                fflag(bl, 0, k, j, i) = fflagl;
+            });
+    }
+
+    if (reconstruction_fallback) {
+        pmb0->par_for("calc_flux_reconfallback", block.s, block.e, b.ks,
+            b.ke, b.js, b.je, b.is, b.ie,
+            KOKKOS_LAMBDA(const int& bl,
+                        const int& k,
+                        const int& j,
+                        const int& i)
+            {
+                if (fflag(bl, 0, k, j, i) != 0.) {
+                    for (int p = 0; p <= P_all.GetDim(4) - 1; ++p) {
+                        // TODO map weno/ppmx -> ppm 
+                        if constexpr (dir == 1) {
+                            KReconstruction::reconstruct<RType::ppm>(P_all(bl, p, k, j, i - 2), P_all(bl, p, k, j, i - 1),
+                                P_all(bl, p, k, j, i), P_all(bl, p, k, j, i + 1), P_all(bl, p, k, j, i + 2),
+                                Pr_all(bl, p, k, j, i), Pl_all(bl, p, k, j, i + 1));
+                        } else if constexpr (dir == 2) {
+                            KReconstruction::reconstruct<RType::ppm>(P_all(bl, p, k, j - 2, i), P_all(bl, p, k, j - 1, i),
+                                P_all(bl, p, k, j, i), P_all(bl, p, k, j + 1, i), P_all(bl, p, k, j + 2, i),
+                                Pr_all(bl, p, k, j, i), Pl_all(bl, p, k, j + 1, i));
+                        } else if constexpr (dir == 3) {
+                            KReconstruction::reconstruct<RType::ppm>(P_all(bl, p, k - 2, j, i), P_all(bl, p, k - 1, j, i),
+                                P_all(bl, p, k, j, i), P_all(bl, p, k + 1, j, i), P_all(bl, p, k + 2, j, i),
+                                Pr_all(bl, p, k, j, i), Pl_all(bl, p, k + 1, j, i));
+                        }
+                    }
+                }
+            });
+    }
     EndFlag();
 
     // If we have B field on faces, we "must" replace reconstructed version with that
