@@ -1,5 +1,5 @@
 
-# Config for OLCF Frontier
+# Config for ALCF Aurora
 
 if [[ $HOST == *".aurora.alcf.anl.gov" ]]
 then
@@ -19,11 +19,12 @@ then
   export OMP_PLACES=${OMP_PLACES:-threads}
 
   # Aurora's HDF5 does not include ZLIB
-  # But this seems to not fix it, which is great
+  # This may not be necessary, but Flare is fast
   EXTRA_FLAGS="-DPARTHENON_DISABLE_HDF5_COMPRESSION=ON $EXTRA_FLAGS"
 
   if [[ $ARGS == *"sycl"* ]]; then
     # SYCL compile for Intel GPUs
+    DEVICE_ARCH=INTEL_PVC
 
     # I think this is faster on Intel like on AMD?
     EXTRA_FLAGS="-DKHARMA_SPLIT_IMPLICIT_SOLVE=ON $EXTRA_FLAGS"
@@ -33,8 +34,9 @@ then
     MPI_NUM_PROCS=${MPI_NUM_PROCS:-12}
     MPI_EXTRA_ARGS="-ppn 12 $CPU_BIND_SCHEME gpu_tile_compact.sh"
 
+    #export CPU_BIND_SCHEME="--cpu-bind=list:1-8:17-24:33-40:53-60:69-76:85-92"
     #MPI_NUM_PROCS=${MPI_NUM_PROCS:-6}
-    #MPI_EXTRA_ARGS="-ppn 6 $CPU_BIND_SCHEME gpu_tile_compact.sh"
+    #MPI_EXTRA_ARGS="-ppn 6 $CPU_BIND_SCHEME gpu_dev_compact.sh"
 
   else
     # CPU Compile
