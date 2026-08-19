@@ -135,7 +135,7 @@ inline TaskStatus GetFlux(MeshData<Real>* md)
     // We need fluxes outside the domain for flux-CT and FOFC: one extra zone update on
     // each side
     const IndexRange3 b =
-        KDomain::GetRange(md, IndexDomain::interior, FaceOf(dir), -1, 1);
+        KDomain::GetRange(md, IndexDomain::interior, FaceOf(dir), -2, 1);
     // Get other sizes we need
     const int n1 = pmb0->cellbounds.ncellsi(IndexDomain::entire);
     const IndexRange block = IndexRange{0, cmax.GetDim(5) - 1};
