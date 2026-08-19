@@ -77,6 +77,8 @@ std::shared_ptr<KHARMAPackage> Flux::Initialize(
     } else if (pin->DoesParameterExist("GRMHD", "reconstruction")) {
         default_recon_s = pin->GetString("GRMHD", "reconstruction");
     }
+    // Probably nobody has specified donor_cell_c in years, should remove
+    // Indicated cell-wise vs row-wise donor cell recon
     std::vector<std::string> recon_allowed_vals = {"donor_cell", "donor_cell_c",
         "linear_vl", "linear_mc", "weno5", "weno5_linear", "ppm", "ppmx", "mp5"};
     std::string recon = pin->GetOrAddString(
@@ -91,11 +93,8 @@ std::shared_ptr<KHARMAPackage> Flux::Initialize(
             "Lowered reconstructions can only be enabled with weno5!");
 
     int stencil = 0;
-    if (recon == "donor_cell") {
+    if (recon == "donor_cell" || recon == "donor_cell_c") {
         params.Add("recon", KReconstruction::Type::donor_cell);
-        stencil = 1;
-    } else if (recon == "donor_cell_c") {
-        params.Add("recon", KReconstruction::Type::donor_cell_c);
         stencil = 1;
     } else if (recon == "linear_vl") {
         params.Add("recon", KReconstruction::Type::linear_vl);

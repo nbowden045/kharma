@@ -251,14 +251,6 @@ TaskID KHARMADriver::AddFluxCalculations(
             t_calculate_flux3 =
                 tl.AddTask(t_start_fluxes, Flux::GetFlux<RType::donor_cell, X3DIR>, md);
             break;
-        case RType::donor_cell_c:
-            t_calculate_flux1 =
-                tl.AddTask(t_start_fluxes, Flux::GetFlux<RType::donor_cell_c, X1DIR>, md);
-            t_calculate_flux2 =
-                tl.AddTask(t_start_fluxes, Flux::GetFlux<RType::donor_cell_c, X2DIR>, md);
-            t_calculate_flux3 =
-                tl.AddTask(t_start_fluxes, Flux::GetFlux<RType::donor_cell_c, X3DIR>, md);
-            break;
         case RType::linear_vl:
             t_calculate_flux1 =
                 tl.AddTask(t_start_fluxes, Flux::GetFlux<RType::linear_vl, X1DIR>, md);
