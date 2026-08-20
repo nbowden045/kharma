@@ -209,37 +209,39 @@ TaskStatus SeedBFieldType(MeshBlockData<Real>* rc, ParameterInput* pin,
         Real a, rin, rmax, gam, kappa, rho_norm, arg1, n, rs, rb;
         Real tilt = 0; // Needs to be initialized
         switch (Seed) {
-        case BSeedType::sane:
-        case BSeedType::mad:
-        case BSeedType::mad_quadrupole:
-        case BSeedType::mcaf:
-        case BSeedType::r3s3:
-        case BSeedType::r3s3_min_rho:
-        case BSeedType::r5s5:
-        case BSeedType::gaussian:
-            // Torus parameters
-            rin = pin->GetReal("torus", "rin");
-            rmax = pin->GetReal("torus", "rmax");
-            kappa = pin->GetReal("torus", "kappa");
-            tilt = pin->GetReal("torus", "tilt") / 180. * M_PI;
-            // Other things we need only for torus evaluation
-            gam = pmb->packages.Get("GRMHD")->Param<Real>("gamma");
-            rho_norm = pmb->packages.Get("GRMHD")->Param<Real>("rho_norm");
-            a = G.coords.get_a();
-            break;
-        case BSeedType::orszag_tang_a:
-            A0 = pin->GetReal("orszag_tang", "tscale");
-            arg1 = pin->GetReal("orszag_tang", "phase");
-            break;
-        case BSeedType::r1s2:
-            gam = pmb->packages.Get("GRMHD")->Param<Real>("gamma");
-            n = 1. / (gam - 1.);
-            rs = pin->GetOrAddReal("bondi", "rs", m::sqrt(1e5));
-            if (m::abs(n-1.5) < 0.01) rb = rs * rs * 80. / (27. * gam);
-            else rb = (4 * (n + 1)) / (2 * (n + 3) - 9) * rs;
-            break;
-        default:
-            break;
+            case BSeedType::sane:
+            case BSeedType::mad:
+            case BSeedType::mad_quadrupole:
+            case BSeedType::mcaf:
+            case BSeedType::r3s3:
+            case BSeedType::r3s3_min_rho:
+            case BSeedType::r5s5:
+            case BSeedType::gaussian:
+                // Torus parameters
+                rin = pin->GetReal("torus", "rin");
+                rmax = pin->GetReal("torus", "rmax");
+                kappa = pin->GetReal("torus", "kappa");
+                tilt = pin->GetReal("torus", "tilt") / 180. * M_PI;
+                // Other things we need only for torus evaluation
+                gam = pmb->packages.Get("GRMHD")->Param<Real>("gamma");
+                rho_norm = pmb->packages.Get("GRMHD")->Param<Real>("rho_norm");
+                a = G.coords.get_a();
+                break;
+            case BSeedType::orszag_tang_a:
+                A0 = pin->GetReal("orszag_tang", "tscale");
+                arg1 = pin->GetReal("orszag_tang", "phase");
+                break;
+            case BSeedType::r1s2:
+                gam = pmb->packages.Get("GRMHD")->Param<Real>("gamma");
+                n = 1. / (gam - 1.);
+                rs = pin->GetOrAddReal("bondi", "rs", m::sqrt(1e5));
+                if (m::abs(n - 1.5) < 0.01)
+                    rb = rs * rs * 80. / (27. * gam);
+                else
+                    rb = (4 * (n + 1)) / (2 * (n + 3) - 9) * rs;
+                break;
+            default:
+                break;
         }
 
         // For all other fields...
