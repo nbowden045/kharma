@@ -100,7 +100,8 @@ static const std::map<int, std::string> flag_names = {
     {B_RHO, "B_RHO: Ceiling on plasma sigma"}, {B_U, "B_U: Ceiling on plasma beta"},
     {GAMMA, "GAMMA: Direct limit on Lorentz factor"}, {TEMP, "TEMP: Temperature ceiling"},
     {KTOT, "KTOT: Entropy ceiling"},
-    {GEOM_RHO_FLUX, "GEOM_RHO_FLUX: Geometric rho floor at face or reconstruction fallback"},
+    {GEOM_RHO_FLUX,
+        "GEOM_RHO_FLUX: Geometric rho floor at face or reconstruction fallback"},
     {GEOM_U_FLUX, "GEOM_U_FLUX: Geometric u floor at face or reconstruction fallback"},
     {FIXUP_ENERGY, "FIXUP_ENERGY: Total energy backstop"},
     {FIXUP_VEL, "FIXUP_VEL: Internal energy backstop, recovered some velocity"},
@@ -316,7 +317,7 @@ int CountFFlags(MeshData<Real>* md);
 /**
  * Clear the floor flag before each step
  */
-void PreStepWork(Mesh *pmesh, ParameterInput *pin, const SimTime &tm);
+void PreStepWork(Mesh* pmesh, ParameterInput* pin, const SimTime& tm);
 
 /**
  * Record any changes in conserved variables since the application of flux divergence +

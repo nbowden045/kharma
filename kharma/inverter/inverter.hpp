@@ -111,7 +111,7 @@ int CountPFlags(MeshData<Real>* md);
  * Generally invocations of UtoP will clear/not respect existing pflag,
  * BUT useful for partial-domain calls and for consistency
  */
-void PreStepWork(Mesh *pmesh, ParameterInput *pin, const SimTime &tm);
+void PreStepWork(Mesh* pmesh, ParameterInput* pin, const SimTime& tm);
 
 /**
  * Print details of any inversion failures or fixed zones

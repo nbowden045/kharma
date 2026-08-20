@@ -253,7 +253,7 @@ int Inverter::CountPFlags(MeshData<Real>* md)
         md, "pflag", Inverter::status_names, IndexDomain::interior, false)[0];
 }
 
-void Inverter::PreStepWork(Mesh *pmesh, ParameterInput *pin, const SimTime &tm)
+void Inverter::PreStepWork(Mesh* pmesh, ParameterInput* pin, const SimTime& tm)
 {
     // Clear all floor flags before each step
     auto md = pmesh->mesh_data.Get().get();

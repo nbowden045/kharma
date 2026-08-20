@@ -139,8 +139,15 @@ inline TaskStatus GetFlux(MeshData<Real>* md)
     // Get the domain size
     // We need fluxes outside the domain for flux-CT and FOFC: one extra zone update on
     // each side
+    // TODO(CEP) restrict the extra halo to those cases for speed
+
+    // Actual faces where we want fluxes
     const IndexRange3 b =
+        KDomain::GetRange(md, IndexDomain::interior, FaceOf(dir), -1, 1);
+    // Cell-centered range: face X needs right-side from cell X-1 but left-side from X
+    const IndexRange3 bc =
         KDomain::GetRange(md, IndexDomain::interior, FaceOf(dir), -2, 1);
+
     // Get other sizes we need
     const int n1 = pmb0->cellbounds.ncellsi(IndexDomain::entire);
     const IndexRange block = IndexRange{0, cmax.GetDim(5) - 1};
@@ -159,7 +166,8 @@ inline TaskStatus GetFlux(MeshData<Real>* md)
     // This isn't a pmb0->par_for_outer because Parthenon's current overloaded definitions
     // do not accept three pairs of bounds, which we need in order to iterate over blocks
     Flag("GetFlux_" + std::to_string(dir) + "_recon");
-    pmb0->par_for("calc_flux_recon", block.s, block.e, 0, P_all.GetDim(4) - 1, b.ks, b.ke, b.js, b.je, b.is, b.ie,
+    pmb0->par_for("calc_flux_recon", block.s, block.e, 0, P_all.GetDim(4) - 1, bc.ks,
+        bc.ke, bc.js, bc.je, bc.is, bc.ie,
         KOKKOS_LAMBDA(const int& bl,
                       const int& p,
                       const int& k,
@@ -244,16 +252,18 @@ inline TaskStatus GetFlux(MeshData<Real>* md)
     }
 
     if (reconstruction_fallback) {
-        pmb0->par_for("calc_flux_reconfallback", block.s, block.e, 0, P_all.GetDim(4) - 1, b.ks, b.ke, b.js, b.je,
-            b.is, b.ie,
+        pmb0->par_for("calc_flux_reconfallback", block.s, block.e, 0, P_all.GetDim(4) - 1,
+            b.ks, b.ke, b.js, b.je, b.is, b.ie,
             KOKKOS_LAMBDA(const int& bl,
                         const int& p,
                         const int& k,
                         const int& j,
                         const int& i)
             {
-                if ((static_cast<int>(fflag(bl, 0, k, j, i)) & static_cast<int>(Floors::FFlag::GEOM_RHO_FLUX)) ||
-                    (static_cast<int>(fflag(bl, 0, k, j, i)) & static_cast<int>(Floors::FFlag::GEOM_U_FLUX))) {
+                if ((static_cast<int>(fflag(bl, 0, k, j, i)) &
+                        static_cast<int>(Floors::FFlag::GEOM_RHO_FLUX)) ||
+                    (static_cast<int>(fflag(bl, 0, k, j, i)) &
+                        static_cast<int>(Floors::FFlag::GEOM_U_FLUX))) {
                     if constexpr (dir == 1) {
                         // Recon left of this cell == right of this face
                         KReconstruction::reconstruct_left<RType::ppm>(

@@ -319,7 +319,8 @@ TaskStatus Floors::DetermineGRMHDFloors(MeshData<Real>* md, IndexDomain domain,
             const auto& G = P.GetCoords(b);
             // The inverter might have set some floor flags, so we add to that
             // non-destructively
-            fflag(b, 0, k, j, i) = static_cast<int>(fflag(b, 0, k, j, i)) |
+            fflag(b, 0, k, j, i) =
+                static_cast<int>(fflag(b, 0, k, j, i)) |
                 determine_floors(G, P(b), m_p, gam, k, j, i, floors, floors_inner,
                     floor_vals(b, rhofi, k, j, i), floor_vals(b, ufi, k, j, i));
         });
@@ -394,7 +395,7 @@ int Floors::CountFFlags(MeshData<Real>* md)
         md, "fflag", FFlag::flag_names, IndexDomain::interior, true)[0];
 }
 
-void Floors::PreStepWork(Mesh *pmesh, ParameterInput *pin, const SimTime &tm)
+void Floors::PreStepWork(Mesh* pmesh, ParameterInput* pin, const SimTime& tm)
 {
     // Clear all floor flags before each step
     auto md = pmesh->mesh_data.Get().get();
