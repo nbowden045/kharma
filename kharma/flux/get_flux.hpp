@@ -79,20 +79,25 @@ inline TaskStatus GetFlux(MeshData<Real>* md)
     const bool use_hlle = pars.Get<bool>("use_hlle");
 
     const bool reconstruction_floors = pars.Get<bool>("reconstruction_floors");
+    const bool reconstruction_fallback = pars.Get<bool>("reconstruction_fallback");
     Floors::Prescription floors_temp;
     Floors::Prescription floors_inner_temp;
-    if (reconstruction_floors) {
+    if (reconstruction_floors || reconstruction_fallback) {
         // Apply post-reconstruction floors.
         // Only enabled for WENO since it is not TVD, and only when other
         // floors are enabled.
         floors_temp = packages.Get("Floors")->Param<Floors::Prescription>("prescription");
         floors_inner_temp =
             packages.Get("Floors")->Param<Floors::Prescription>("prescription_inner");
+        if (reconstruction_fallback) {
+            floors_temp.rho_min_const = 0.;
+            floors_temp.u_min_const = 0.;
+            floors_temp.rho_min_geom = 0.;
+            floors_temp.u_min_geom = 0.;
+        }
     }
     const Floors::Prescription& floors = floors_temp;
     const Floors::Prescription& floors_inner = floors_inner_temp;
-
-    const bool reconstruction_fallback = pars.Get<bool>("reconstruction_fallback");
 
     const Real gam = mhd_pars.Get<Real>("gamma");
 
@@ -134,8 +139,15 @@ inline TaskStatus GetFlux(MeshData<Real>* md)
     // Get the domain size
     // We need fluxes outside the domain for flux-CT and FOFC: one extra zone update on
     // each side
+    // TODO(CEP) restrict the extra halo to those cases for speed
+
+    // Actual faces where we want fluxes
     const IndexRange3 b =
+        KDomain::GetRange(md, IndexDomain::interior, FaceOf(dir), -1, 1);
+    // Cell-centered range: face X needs right-side from cell X-1 but left-side from X
+    const IndexRange3 bc =
         KDomain::GetRange(md, IndexDomain::interior, FaceOf(dir), -2, 1);
+
     // Get other sizes we need
     const int n1 = pmb0->cellbounds.ncellsi(IndexDomain::entire);
     const IndexRange block = IndexRange{0, cmax.GetDim(5) - 1};
@@ -154,8 +166,10 @@ inline TaskStatus GetFlux(MeshData<Real>* md)
     // This isn't a pmb0->par_for_outer because Parthenon's current overloaded definitions
     // do not accept three pairs of bounds, which we need in order to iterate over blocks
     Flag("GetFlux_" + std::to_string(dir) + "_recon");
-    pmb0->par_for("calc_flux_recon", block.s, block.e, b.ks, b.ke, b.js, b.je, b.is, b.ie,
+    pmb0->par_for("calc_flux_recon", block.s, block.e, 0, P_all.GetDim(4) - 1, bc.ks,
+        bc.ke, bc.js, bc.je, bc.is, bc.ie,
         KOKKOS_LAMBDA(const int& bl,
+                      const int& p,
                       const int& k,
                       const int& j,
                       const int& i)
@@ -166,52 +180,51 @@ inline TaskStatus GetFlux(MeshData<Real>* md)
             // Instead, a version of GetFlux() is generated separately for each
             // reconstruction/direction pair. See reconstruction.hpp for all the
             // implementations.
-            for (int p = 0; p <= P_all.GetDim(4) - 1; ++p) {
-                // TODO this could be constexpr/templated with only tens more
-                // instantiation lines!
-                if (use_ismr) {
-                    if constexpr (dir == 1) {
-                        KReconstruction::reconstruct<Recon>(P_all(bl, p, k, j, i - 2),
-                            P_all(bl, p, k, j, i - 1), P_all(bl, p, k, j, i),
-                            P_all(bl, p, k, j, i + 1), P_all(bl, p, k, j, i + 2),
-                            Pr_all(bl, p, k, j, i), Pl_all(bl, p, k, j, i + 1));
-                    } else if constexpr (dir == 2) {
-                        KReconstruction::reconstruct<Recon>(P_all(bl, p, k, j - 2, i),
-                            P_all(bl, p, k, j - 1, i), P_all(bl, p, k, j, i),
-                            P_all(bl, p, k, j + 1, i), P_all(bl, p, k, j + 2, i),
-                            Pr_all(bl, p, k, j, i), Pl_all(bl, p, k, j + 1, i));
-                    } else if constexpr (dir == 3) {
-                        if (j < ng_plus_nlevels ||
-                            j > P_all.GetDim(2) - 1 - ng_plus_nlevels) {
-                            KReconstruction::reconstruct<RType::linear_mc>(
-                                P_all(bl, p, k - 2, j, i), P_all(bl, p, k - 1, j, i),
-                                P_all(bl, p, k, j, i), P_all(bl, p, k + 1, j, i),
-                                P_all(bl, p, k + 2, j, i), Pr_all(bl, p, k, j, i),
-                                Pl_all(bl, p, k + 1, j, i));
-                        } else {
-                            KReconstruction::reconstruct<Recon>(P_all(bl, p, k - 2, j, i),
-                                P_all(bl, p, k - 1, j, i), P_all(bl, p, k, j, i),
-                                P_all(bl, p, k + 1, j, i), P_all(bl, p, k + 2, j, i),
-                                Pr_all(bl, p, k, j, i), Pl_all(bl, p, k + 1, j, i));
-                        }
-                    }
-                } else {
-                    if constexpr (dir == 1) {
-                        KReconstruction::reconstruct<Recon>(P_all(bl, p, k, j, i - 2),
-                            P_all(bl, p, k, j, i - 1), P_all(bl, p, k, j, i),
-                            P_all(bl, p, k, j, i + 1), P_all(bl, p, k, j, i + 2),
-                            Pr_all(bl, p, k, j, i), Pl_all(bl, p, k, j, i + 1));
-                    } else if constexpr (dir == 2) {
-                        KReconstruction::reconstruct<Recon>(P_all(bl, p, k, j - 2, i),
-                            P_all(bl, p, k, j - 1, i), P_all(bl, p, k, j, i),
-                            P_all(bl, p, k, j + 1, i), P_all(bl, p, k, j + 2, i),
-                            Pr_all(bl, p, k, j, i), Pl_all(bl, p, k, j + 1, i));
-                    } else if constexpr (dir == 3) {
+
+            // TODO this could be constexpr/templated with only tens more
+            // instantiation lines!
+            if (use_ismr) {
+                if constexpr (dir == 1) {
+                    KReconstruction::reconstruct<Recon>(P_all(bl, p, k, j, i - 2),
+                        P_all(bl, p, k, j, i - 1), P_all(bl, p, k, j, i),
+                        P_all(bl, p, k, j, i + 1), P_all(bl, p, k, j, i + 2),
+                        Pr_all(bl, p, k, j, i), Pl_all(bl, p, k, j, i + 1));
+                } else if constexpr (dir == 2) {
+                    KReconstruction::reconstruct<Recon>(P_all(bl, p, k, j - 2, i),
+                        P_all(bl, p, k, j - 1, i), P_all(bl, p, k, j, i),
+                        P_all(bl, p, k, j + 1, i), P_all(bl, p, k, j + 2, i),
+                        Pr_all(bl, p, k, j, i), Pl_all(bl, p, k, j + 1, i));
+                } else if constexpr (dir == 3) {
+                    if (j < ng_plus_nlevels ||
+                        j > P_all.GetDim(2) - 1 - ng_plus_nlevels) {
+                        KReconstruction::reconstruct<RType::linear_mc>(
+                            P_all(bl, p, k - 2, j, i), P_all(bl, p, k - 1, j, i),
+                            P_all(bl, p, k, j, i), P_all(bl, p, k + 1, j, i),
+                            P_all(bl, p, k + 2, j, i), Pr_all(bl, p, k, j, i),
+                            Pl_all(bl, p, k + 1, j, i));
+                    } else {
                         KReconstruction::reconstruct<Recon>(P_all(bl, p, k - 2, j, i),
                             P_all(bl, p, k - 1, j, i), P_all(bl, p, k, j, i),
                             P_all(bl, p, k + 1, j, i), P_all(bl, p, k + 2, j, i),
                             Pr_all(bl, p, k, j, i), Pl_all(bl, p, k + 1, j, i));
                     }
+                }
+            } else {
+                if constexpr (dir == 1) {
+                    KReconstruction::reconstruct<Recon>(P_all(bl, p, k, j, i - 2),
+                        P_all(bl, p, k, j, i - 1), P_all(bl, p, k, j, i),
+                        P_all(bl, p, k, j, i + 1), P_all(bl, p, k, j, i + 2),
+                        Pr_all(bl, p, k, j, i), Pl_all(bl, p, k, j, i + 1));
+                } else if constexpr (dir == 2) {
+                    KReconstruction::reconstruct<Recon>(P_all(bl, p, k, j - 2, i),
+                        P_all(bl, p, k, j - 1, i), P_all(bl, p, k, j, i),
+                        P_all(bl, p, k, j + 1, i), P_all(bl, p, k, j + 2, i),
+                        Pr_all(bl, p, k, j, i), Pl_all(bl, p, k, j + 1, i));
+                } else if constexpr (dir == 3) {
+                    KReconstruction::reconstruct<Recon>(P_all(bl, p, k - 2, j, i),
+                        P_all(bl, p, k - 1, j, i), P_all(bl, p, k, j, i),
+                        P_all(bl, p, k + 1, j, i), P_all(bl, p, k + 2, j, i),
+                        Pr_all(bl, p, k, j, i), Pl_all(bl, p, k + 1, j, i));
                 }
             }
         });
@@ -239,35 +252,47 @@ inline TaskStatus GetFlux(MeshData<Real>* md)
     }
 
     if (reconstruction_fallback) {
-        pmb0->par_for("calc_flux_reconfallback", block.s, block.e, b.ks, b.ke, b.js, b.je,
-            b.is, b.ie,
+        pmb0->par_for("calc_flux_reconfallback", block.s, block.e, 0, P_all.GetDim(4) - 1,
+            b.ks, b.ke, b.js, b.je, b.is, b.ie,
             KOKKOS_LAMBDA(const int& bl,
+                        const int& p,
                         const int& k,
                         const int& j,
                         const int& i)
             {
-                if (fflag(bl, 0, k, j, i) != 0.) {
-                    for (int p = 0; p <= P_all.GetDim(4) - 1; ++p) {
-                        // TODO map weno/ppmx -> ppm
-                        if constexpr (dir == 1) {
-                            KReconstruction::reconstruct<RType::ppm>(
-                                P_all(bl, p, k, j, i - 2), P_all(bl, p, k, j, i - 1),
-                                P_all(bl, p, k, j, i), P_all(bl, p, k, j, i + 1),
-                                P_all(bl, p, k, j, i + 2), Pr_all(bl, p, k, j, i),
-                                Pl_all(bl, p, k, j, i + 1));
-                        } else if constexpr (dir == 2) {
-                            KReconstruction::reconstruct<RType::ppm>(
-                                P_all(bl, p, k, j - 2, i), P_all(bl, p, k, j - 1, i),
-                                P_all(bl, p, k, j, i), P_all(bl, p, k, j + 1, i),
-                                P_all(bl, p, k, j + 2, i), Pr_all(bl, p, k, j, i),
-                                Pl_all(bl, p, k, j + 1, i));
-                        } else if constexpr (dir == 3) {
-                            KReconstruction::reconstruct<RType::ppm>(
-                                P_all(bl, p, k - 2, j, i), P_all(bl, p, k - 1, j, i),
-                                P_all(bl, p, k, j, i), P_all(bl, p, k + 1, j, i),
-                                P_all(bl, p, k + 2, j, i), Pr_all(bl, p, k, j, i),
-                                Pl_all(bl, p, k + 1, j, i));
-                        }
+                if ((static_cast<int>(fflag(bl, 0, k, j, i)) &
+                        static_cast<int>(Floors::FFlag::GEOM_RHO_FLUX)) ||
+                    (static_cast<int>(fflag(bl, 0, k, j, i)) &
+                        static_cast<int>(Floors::FFlag::GEOM_U_FLUX))) {
+                    if constexpr (dir == 1) {
+                        // Recon left of this cell == right of this face
+                        KReconstruction::reconstruct_left<RType::ppm>(
+                            P_all(bl, p, k, j, i - 2), P_all(bl, p, k, j, i - 1),
+                            P_all(bl, p, k, j, i), P_all(bl, p, k, j, i + 1),
+                            P_all(bl, p, k, j, i + 2), Pr_all(bl, p, k, j, i));
+                        // Recon right of last cell == left of this face
+                        KReconstruction::reconstruct_right<RType::ppm>(
+                            P_all(bl, p, k, j, i - 3), P_all(bl, p, k, j, i - 2),
+                            P_all(bl, p, k, j, i - 1), P_all(bl, p, k, j, i),
+                            P_all(bl, p, k, j, i + 1), Pl_all(bl, p, k, j, i));
+                    } else if constexpr (dir == 2) {
+                        KReconstruction::reconstruct_left<RType::ppm>(
+                            P_all(bl, p, k, j - 2, i), P_all(bl, p, k, j - 1, i),
+                            P_all(bl, p, k, j, i), P_all(bl, p, k, j + 1, i),
+                            P_all(bl, p, k, j + 2, i), Pr_all(bl, p, k, j, i));
+                        KReconstruction::reconstruct_right<RType::ppm>(
+                            P_all(bl, p, k, j - 3, i), P_all(bl, p, k, j - 2, i),
+                            P_all(bl, p, k, j - 1, i), P_all(bl, p, k, j, i),
+                            P_all(bl, p, k, j + 1, i), Pl_all(bl, p, k, j, i));
+                    } else if constexpr (dir == 3) {
+                        KReconstruction::reconstruct_left<RType::ppm>(
+                            P_all(bl, p, k - 2, j, i), P_all(bl, p, k - 1, j, i),
+                            P_all(bl, p, k, j, i), P_all(bl, p, k + 1, j, i),
+                            P_all(bl, p, k + 2, j, i), Pr_all(bl, p, k, j, i));
+                        KReconstruction::reconstruct_right<RType::ppm>(
+                            P_all(bl, p, k - 3, j, i), P_all(bl, p, k - 2, j, i),
+                            P_all(bl, p, k - 1, j, i), P_all(bl, p, k, j, i),
+                            P_all(bl, p, k + 1, j, i), Pl_all(bl, p, k, j, i));
                     }
                 }
             });
