@@ -41,7 +41,7 @@
 #include <string.h>
 #include <hdf5.h>
 
-// This lib uses a global debug flag if one exists
+// KHARMA uses unset/set, but this file used 0/1. Convert.
 #ifndef DEBUG
 #define DEBUG 0
 #endif
